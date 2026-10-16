@@ -41,19 +41,19 @@ export const APPS = [
     desc: 'Planning poker',
     origin: 'https://sprintpoker.uk',
   },
-  // Phase 2: plan is a launched app (collaboration requires an account, so the
-  // dashboard must hand it a session via /launch/plan, not a direct link). This
-  // reverses the Brief 10 free-direct-link tile. The free single-user app is still
-  // reachable by visiting sprintplan.uk directly (dual-mode); only the hub tile
-  // changes. Entitlement-gated like the other apps (granted liberally — free).
+  // Launched (not a direct link) because collaboration needs a hub session.
+  // `open`: every signed-in user is entitled, no grant row needed.
   {
     key: 'plan',
     name: 'Sprintplan',
     icon: '📋',
     desc: 'Delivery planning board',
     origin: 'https://sprintplan.uk',
+    open: true,
   },
 ];
+
+export const OPEN_APPS = new Set(APPS.filter((a) => a.open).map((a) => a.key));
 
 // key → origin, for building the /auth/launch redirect.
 export const APP_ORIGIN = Object.fromEntries(APPS.map((a) => [a.key, a.origin]));
