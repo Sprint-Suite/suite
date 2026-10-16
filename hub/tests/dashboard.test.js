@@ -46,9 +46,10 @@ test('Phase 2: Sprintplan is a launched app, no longer a free direct link', asyn
   assert.equal(res.status, 200);
   // The Brief 10 free-direct-link tile is gone (collaboration requires an account).
   assert.doesNotMatch(res.text, /href="https:\/\/sprintplan\.uk"/);
-  // This user has no plan entitlement, so (like any gated app) no launch form yet —
-  // it shows Request access until entitled, then /launch/plan appears.
-  assert.doesNotMatch(res.text, /action="\/launch\/plan"/);
+  // Sprintplan is open to every signed-in user: no grant, yet the launch form is
+  // there. Sprintsignal, still gated, is the near miss.
+  assert.match(res.text, /action="\/launch\/plan"/);
+  assert.doesNotMatch(res.text, /action="\/launch\/signal"/);
 });
 
 test('dashboard shows a Manage link for companies the user owns/admins', async () => {

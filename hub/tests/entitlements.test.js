@@ -302,3 +302,19 @@ test('listCompanyApps lists active company-scoped apps', () => {
   assert.deepEqual(apps, ['poker', 'raid']);
   db.close();
 });
+
+// --- open apps ---
+test('plan is entitled for a user with no grant, unlimited; signal is not', () => {
+  const db = openDb(':memory:');
+  const ent = createEntitlements(db);
+  seedUser(db, 'u1', 'a@b.c');
+  assert.deepEqual(ent.resolveEntitlement('u1', 'plan'), {
+    entitled: true,
+    principal: null,
+    quota: null,
+  });
+  assert.deepEqual(ent.consume('u1', 'plan'), { ok: true, remaining: null });
+  assert.equal(ent.resolveEntitlement('u1', 'signal').entitled, false);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM app_usage').get().n, 0);
+  db.close();
+});

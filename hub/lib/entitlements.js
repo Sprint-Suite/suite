@@ -6,6 +6,7 @@
 // same six methods with the same signatures — but each operation is now readable,
 // and measurable, on its own instead of being one 126-line closure.
 import { randomId, now } from './tokens.js';
+import { OPEN_APPS } from './apps.js';
 
 const PRINCIPAL_TYPES = new Set(['company', 'team', 'user']);
 
@@ -96,6 +97,7 @@ function select(db, userId, app, t) {
 }
 
 function resolveEntitlement(db, userId, app, t) {
+  if (OPEN_APPS.has(app)) return { entitled: true, principal: null, quota: null };
   const sel = select(db, userId, app, t);
   if (!sel) return { entitled: false, principal: null, quota: null };
   const e = sel.entitlement;
@@ -112,6 +114,7 @@ function resolveEntitlement(db, userId, app, t) {
 // current count and the increment must not interleave with another consumer, or
 // the quota is a suggestion.
 function consumeOnce(db, userId, app, t) {
+  if (OPEN_APPS.has(app)) return { ok: true, remaining: null };
   const sel = select(db, userId, app, t);
   if (!sel) return { ok: false, reason: 'not_entitled' };
   const e = sel.entitlement;
