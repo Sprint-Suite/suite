@@ -13,6 +13,14 @@ export const REDACT_PATHS = ['token', '*.token', 'password', '*.password'];
 // Query-string keys whose values are masked by safeUrl (e.g. magic-link tokens).
 const SENSITIVE_QUERY = new Set(['token', 'password']);
 
+function queryKeyName(key) {
+  try {
+    return decodeURIComponent(key).toLowerCase();
+  } catch {
+    return key.toLowerCase();
+  }
+}
+
 // Mask sensitive query param values in a URL while preserving the path,
 // every other param byte-for-byte, and any #fragment. Uses targeted
 // replacement (not a URLSearchParams round-trip) so the sentinel stays
@@ -24,7 +32,7 @@ export function safeUrl(url) {
   const path = url.slice(0, q);
   const query = url.slice(q + 1);
   const masked = query.replace(/([^&=#?]+)=([^&#]*)/g, (match, key, _val) =>
-    SENSITIVE_QUERY.has(decodeURIComponent(key).toLowerCase()) ? `${key}=[redacted]` : match,
+    SENSITIVE_QUERY.has(queryKeyName(key)) ? `${key}=[redacted]` : match,
   );
   return `${path}?${masked}`;
 }

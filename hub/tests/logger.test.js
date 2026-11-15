@@ -57,3 +57,9 @@ test('safeUrl masks sensitive query params but keeps the path', () => {
   assert.ok(!safeUrl('/x?password=topsecretpw').includes('topsecretpw'));
   assert.equal(safeUrl('/p?token=abc#frag'), '/p?token=[redacted]#frag');
 });
+
+test('safeUrl does not throw on malformed percent-encoding', () => {
+  assert.equal(typeof safeUrl('/login?%=x'), 'string');
+  const out = safeUrl('/x?%E0=1&token=abc');
+  assert.equal(out, '/x?%E0=1&token=[redacted]');
+});
