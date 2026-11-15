@@ -164,3 +164,56 @@ test('hubApi.heartbeat maps a 200 body with entitlement to context', async () =>
     context: { entitled: true, teams: [], company: { id: 'c1', name: 'C' } },
   });
 });
+
+const ENTITLED = {
+  entitled: true,
+  teams: [{ id: 't1', name: 'Alpha', role: 'lead' }],
+  company: { id: 'c1' },
+};
+
+function deferredHeartbeats() {
+  const pending = [];
+  const heartbeat = () =>
+    new Promise((resolve) => {
+      pending.push((context) => resolve({ status: 'ok', context }));
+    });
+  return { heartbeat, pending };
+}
+
+test('an older heartbeat response cannot overwrite a newer one', async (t) => {
+  const { heartbeat, pending } = deferredHeartbeats();
+  const client = buildClient(t, heartbeat);
+  advance(t, 61_000);
+  const older = client.verifySession(COOKIE);
+  advance(t, 1);
+  const newer = client.verifySession(COOKIE);
+  assert.equal(pending.length, 2);
+  pending[1](REVOKED);
+  assert.equal((await newer).entitled, false);
+  advance(t, 1);
+  pending[0](ENTITLED);
+  const result = await older;
+  assert.equal(result.entitled, false);
+  assert.equal(result.company, null);
+  const row = client._ctx.store.get('a1');
+  assert.equal(row.entitled, false);
+  assert.equal(row.company, null);
+  assert.equal(row.last_validated_at, T0 + 61_001);
+});
+
+test('heartbeat fetch has a timeout', async (t) => {
+  const requested = [];
+  t.mock.method(AbortSignal, 'timeout', (ms) => {
+    requested.push(ms);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException('timed out', 'TimeoutError')), 1);
+    return controller.signal;
+  });
+  const fetchImpl = (_url, opts) =>
+    new Promise((_resolve, reject) => {
+      opts.signal.addEventListener('abort', () => reject(opts.signal.reason));
+    });
+  const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl });
+  assert.deepEqual(await api.heartbeat('s1'), { status: 'unreachable', context: null });
+  assert.deepEqual(requested, [5000]);
+});

@@ -1,4 +1,6 @@
 // lib/hub-api.js
+const HEARTBEAT_TIMEOUT_MS = 5000;
+
 // Null unless the body is JSON carrying an entitlement object; callers treat null as an error.
 async function readHeartbeatContext(res) {
   const body = await res.json().catch(() => null);
@@ -30,6 +32,7 @@ function createHubApi({ baseUrl, apiKey, appName, fetchImpl = globalThis.fetch }
         const res = await fetchImpl(`${baseUrl}/api/sessions/${centralSessionId}/heartbeat`, {
           method: 'POST',
           headers,
+          signal: AbortSignal.timeout(HEARTBEAT_TIMEOUT_MS),
         });
         if (res.status === 200) {
           const context = await readHeartbeatContext(res);

@@ -8,12 +8,12 @@ function createHeartbeatHandler(ctx) {
     if (!cookieVal) return res.status(401).json({ error: 'no_session' });
     const sess = ctx.store.get(cookieVal);
     if (!sess) return res.status(401).json({ error: 'no_session' });
+    const startedAt = Date.now();
     const { status, context } = await ctx.hubApi.heartbeat(sess.central_session_id);
-    if (status === 'ok') {
-      applyHeartbeatOk(ctx.store, cookieVal, sess, context);
+    if (status === 'ok' && applyHeartbeatOk(ctx.store, sess, context, startedAt)) {
       return res.status(200).json({ ok: true });
     }
-    if (status === 'expired') {
+    if (status === 'ok' || status === 'expired') {
       ctx.store.delete(cookieVal);
       clearSessionCookie(res, { name: ctx.cookieName, domain: ctx.cookieDomain });
       return res.status(401).json({ error: 'expired' });

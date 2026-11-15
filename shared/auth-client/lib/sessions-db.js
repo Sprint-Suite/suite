@@ -81,16 +81,21 @@ function createSessionsStore(dbPath) {
     touch(id) {
       db.prepare('UPDATE app_sessions SET last_validated_at = ? WHERE id = ?').run(Date.now(), id);
     },
-    refresh(id, { entitled, teams, company }) {
-      db.prepare(
-        'UPDATE app_sessions SET entitled = ?, teams = ?, company = ?, last_validated_at = ? WHERE id = ?',
-      ).run(
-        entitled ? 1 : 0,
-        JSON.stringify(teams ?? []),
-        JSON.stringify(company ?? null),
-        Date.now(),
-        id,
-      );
+    // Applies only if no validation completed after startedAt; returns whether it applied.
+    refresh(id, { entitled, teams, company }, startedAt) {
+      const { changes } = db
+        .prepare(
+          'UPDATE app_sessions SET entitled = ?, teams = ?, company = ?, last_validated_at = ? WHERE id = ? AND last_validated_at <= ?',
+        )
+        .run(
+          entitled ? 1 : 0,
+          JSON.stringify(teams ?? []),
+          JSON.stringify(company ?? null),
+          Date.now(),
+          id,
+          startedAt,
+        );
+      return changes > 0;
     },
     delete(id) {
       db.prepare('DELETE FROM app_sessions WHERE id = ?').run(id);
