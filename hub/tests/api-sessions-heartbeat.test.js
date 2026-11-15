@@ -56,3 +56,49 @@ test('delete session removes row, future heartbeat returns 404', async () => {
   const row = db.prepare('SELECT * FROM central_sessions WHERE id = ?').get(sid);
   assert.equal(row, undefined);
 });
+
+async function joinCompanyWithRaid(db) {
+  const { createOrg } = await import('../lib/org.js?t=' + Date.now());
+  const { createEntitlements } = await import('../lib/entitlements.js?t=' + Date.now());
+  const org = createOrg(db);
+  const co = org.createCompany({ name: 'Acme', slug: 'acme' });
+  org.addCompanyMember({ userId: 'u1', companyId: co.id, role: 'member' });
+  const team = org.createTeam({ companyId: co.id, name: 'Squad' });
+  org.addTeamMember({ userId: 'u1', teamId: team.id, role: 'member' });
+  const ent = createEntitlements(db);
+  const target = { app: 'raid', principalType: 'user', principalId: 'u1' };
+  ent.grantEntitlement({ ...target, grantedBy: null });
+  return { org, ent, co, target };
+}
+
+function beat(app, sid) {
+  return request(app).post(`/api/sessions/${sid}/heartbeat`).set('Authorization', 'Bearer k-raid');
+}
+
+test('heartbeat returns the current company and entitlement', async () => {
+  const { app, db, sid } = await setup();
+  const { co } = await joinCompanyWithRaid(db);
+  const res = await beat(app, sid);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.company.id, co.id);
+  assert.equal(res.body.entitlement.entitled, true);
+  assert.equal(res.body.teams.length, 1);
+});
+
+test('heartbeat reflects removal from the company', async () => {
+  const { app, db, sid } = await setup();
+  const { org, co } = await joinCompanyWithRaid(db);
+  org.removeCompanyMember({ userId: 'u1', companyId: co.id });
+  const res = await beat(app, sid);
+  assert.equal(res.body.company, null);
+  assert.deepEqual(res.body.teams, []);
+});
+
+test('heartbeat reflects a revoked entitlement', async () => {
+  const { app, db, sid } = await setup();
+  const { ent, target } = await joinCompanyWithRaid(db);
+  ent.revokeEntitlement(target);
+  const res = await beat(app, sid);
+  assert.equal(res.body.entitlement.entitled, false);
+});
