@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const { createSessionsStore } = require('../lib/sessions-db.js');
 const { createVerifySession } = require('../lib/verify-session.js');
 
-function ctxWith(store, heartbeat = async () => 'ok') {
+function ctxWith(
+  store,
+  heartbeat = async () => ({ status: 'ok', context: { entitled: true, teams: [], company: null } }),
+) {
   return {
     store,
     hubApi: { heartbeat },
@@ -27,7 +30,7 @@ test('returns context for a fresh session (no hub call)', async () => {
   const verifySession = createVerifySession(
     ctxWith(store, async () => {
       called = true;
-      return 'ok';
+      return { status: 'ok', context: { entitled: true, teams: [], company: null } };
     }),
   );
   const res = await verifySession('poker_session=s1');
@@ -51,7 +54,7 @@ test('returns null when the central session is expired', async () => {
   const store = createSessionsStore(':memory:');
   store.create({ id: 's1', userId: 'u1', centralSessionId: 'c1', expiresAt: Date.now() + 60_000 });
   store.touch('s1');
-  const ctx = ctxWith(store, async () => 'expired');
+  const ctx = ctxWith(store, async () => ({ status: 'expired', context: null }));
   ctx.cacheTtlMs = -1; // force age >= cacheTtlMs so the heartbeat path runs
   const verifySession = createVerifySession(ctx);
   assert.equal(await verifySession('poker_session=s1'), null);
@@ -67,7 +70,7 @@ test('returns context when hub is unavailable but session is within grace', asyn
     entitled: false,
     teams: [],
   });
-  const ctx = ctxWith(store, async () => 'error'); // unknown result = hub unreachable
+  const ctx = ctxWith(store, async () => ({ status: 'error', context: null })); // unknown result = hub unreachable
   ctx.cacheTtlMs = -1; // force heartbeat path (age >= cacheTtlMs)
   ctx.graceMs = 300_000; // generous grace window
   const verifySession = createVerifySession(ctx);
@@ -79,7 +82,7 @@ test('returns context when hub is unavailable but session is within grace', asyn
 test('returns null when hub is unavailable and grace period has passed', async () => {
   const store = createSessionsStore(':memory:');
   store.create({ id: 's1', userId: 'u1', centralSessionId: 'c1', expiresAt: Date.now() + 60_000 });
-  const ctx = ctxWith(store, async () => 'error');
+  const ctx = ctxWith(store, async () => ({ status: 'error', context: null }));
   ctx.cacheTtlMs = -300_001; // age > cacheTtlMs + graceMs
   ctx.graceMs = 0;
   const verifySession = createVerifySession(ctx);

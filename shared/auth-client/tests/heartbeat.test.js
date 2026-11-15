@@ -7,7 +7,8 @@ const { createHubApi } = require('../lib/hub-api.js');
 function buildClient(heartbeatStatus = 200) {
   const fetchImpl = async () => ({
     status: heartbeatStatus,
-    json: async () => (heartbeatStatus === 200 ? { ok: true } : {}),
+    json: async () =>
+      heartbeatStatus === 200 ? { ok: true, entitlement: { entitled: true } } : {},
   });
   const client = createAuthClient({
     appName: 'raid',
@@ -32,7 +33,7 @@ function makeRes() {
       this.body = o;
     },
     end() {},
-    setHeader(n, v) {
+    append(n, v) {
       this.headers[n] = v;
     },
   };

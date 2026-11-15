@@ -63,7 +63,19 @@ function teamsFor(org, userId, companyId, company) {
   return org.teamsForUser(userId, companyId).map((t) => ({ ...t, company: company?.name || null }));
 }
 
-function exchangeSession({ db, org, entitlements, audit }, req, res) {
+function launchContext({ db, org, entitlements }, userId, app) {
+  const entitlement = entitlements.resolveEntitlement(userId, app);
+  const companyId = companyIdFor(db, userId, entitlement);
+  const company = companyId ? org.getCompany(companyId) : null;
+  return {
+    entitlement,
+    teams: teamsFor(org, userId, companyId, company),
+    company: company ? { id: company.id, name: company.name } : null,
+  };
+}
+
+function exchangeSession(deps, req, res) {
+  const { db, audit } = deps;
   const parsed = exchangeSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'missing_launch_token' });
   if (!consumeLaunchToken(db, parsed.data.launch_token)) {
@@ -74,9 +86,6 @@ function exchangeSession({ db, org, entitlements, audit }, req, res) {
   if (row.target_app !== req.callingApp) return res.status(403).json({ error: 'wrong_app' });
   if (row.disabled_at) return res.status(403).json({ error: 'user_disabled' });
 
-  const entitlement = entitlements.resolveEntitlement(row.user_id, row.target_app);
-  const companyId = companyIdFor(db, row.user_id, entitlement);
-  const company = companyId ? org.getCompany(companyId) : null;
   audit.log({
     userId: row.user_id,
     eventType: 'session_exchanged',
@@ -86,13 +95,12 @@ function exchangeSession({ db, org, entitlements, audit }, req, res) {
   res.json({
     user: { id: row.user_id, email: row.email, displayName: row.display_name },
     central_session_id: row.central_session_id,
-    entitlement,
-    teams: teamsFor(org, row.user_id, companyId, company),
-    company: company ? { id: company.id, name: company.name } : null,
+    ...launchContext(deps, row.user_id, row.target_app),
   });
 }
 
-function heartbeat({ db, config }, req, res) {
+function heartbeat(deps, req, res) {
+  const { db, config } = deps;
   const t = now();
   const r = db
     .prepare(
@@ -103,7 +111,10 @@ function heartbeat({ db, config }, req, res) {
     )
     .run(t, req.params.id, t, t - config.sessionIdleMs);
   if (r.changes === 0) return res.status(404).json({ error: 'session_not_found' });
-  res.status(200).json({ ok: true });
+  const { user_id: userId } = db
+    .prepare('SELECT user_id FROM central_sessions WHERE id = ?')
+    .get(req.params.id);
+  res.status(200).json({ ok: true, ...launchContext(deps, userId, req.callingApp) });
 }
 
 function endSession({ db, audit }, req, res) {

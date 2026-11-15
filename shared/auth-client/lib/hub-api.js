@@ -1,4 +1,17 @@
 // lib/hub-api.js
+const HEARTBEAT_TIMEOUT_MS = 5000;
+
+// Null unless the body is JSON carrying an entitlement object; callers treat null as an error.
+async function readHeartbeatContext(res) {
+  const body = await res.json().catch(() => null);
+  if (!body || typeof body.entitlement !== 'object' || body.entitlement === null) return null;
+  return {
+    entitled: body.entitlement.entitled === true,
+    teams: Array.isArray(body.teams) ? body.teams : [],
+    company: body.company ?? null,
+  };
+}
+
 function createHubApi({ baseUrl, apiKey, appName, fetchImpl = globalThis.fetch }) {
   const headers = {
     Authorization: `Bearer ${apiKey}`,
@@ -19,12 +32,16 @@ function createHubApi({ baseUrl, apiKey, appName, fetchImpl = globalThis.fetch }
         const res = await fetchImpl(`${baseUrl}/api/sessions/${centralSessionId}/heartbeat`, {
           method: 'POST',
           headers,
+          signal: AbortSignal.timeout(HEARTBEAT_TIMEOUT_MS),
         });
-        if (res.status === 200) return 'ok';
-        if (res.status === 404) return 'expired';
-        return 'error';
+        if (res.status === 200) {
+          const context = await readHeartbeatContext(res);
+          return context ? { status: 'ok', context } : { status: 'error', context: null };
+        }
+        if (res.status === 404) return { status: 'expired', context: null };
+        return { status: 'error', context: null };
       } catch {
-        return 'unreachable';
+        return { status: 'unreachable', context: null };
       }
     },
     async consume(centralSessionId) {

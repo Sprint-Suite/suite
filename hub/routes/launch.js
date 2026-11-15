@@ -4,6 +4,13 @@ import { createRequireSession } from '../middleware/requireSession.js';
 import { createAuditLogger } from '../lib/audit.js';
 import { APP_ORIGIN } from '../lib/apps.js';
 
+const STATE_PATTERN = /^[a-f0-9]{64}$/;
+
+function stateParam(req) {
+  const state = req.query.state ?? req.body?.state;
+  return typeof state === 'string' && STATE_PATTERN.test(state) ? `&state=${state}` : '';
+}
+
 export function mountLaunch(app) {
   const db = app.locals.db;
   const config = app.locals.config;
@@ -35,7 +42,7 @@ export function mountLaunch(app) {
           returnTo = `&return_to=${encodeURIComponent(req.query.return_to)}`;
       } catch {}
     }
-    res.redirect(`${domain}/auth/launch?token=${token}${returnTo}`);
+    res.redirect(`${domain}/auth/launch?token=${token}${returnTo}${stateParam(req)}`);
   }
 
   app.get('/launch/:app', requireSession, handle);

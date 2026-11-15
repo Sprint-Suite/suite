@@ -34,6 +34,8 @@ function createSessionsStore(dbPath) {
     db.exec("ALTER TABLE app_sessions ADD COLUMN teams TEXT NOT NULL DEFAULT '[]'");
   if (!cols.includes('company'))
     db.exec("ALTER TABLE app_sessions ADD COLUMN company TEXT NOT NULL DEFAULT 'null'");
+  let generation = 0;
+  const appliedGeneration = new Map();
   return {
     create({
       id,
@@ -81,7 +83,30 @@ function createSessionsStore(dbPath) {
     touch(id) {
       db.prepare('UPDATE app_sessions SET last_validated_at = ? WHERE id = ?').run(Date.now(), id);
     },
+    // startedAt is real time (freshness); generation orders this session's overlapping validations.
+    beginValidation() {
+      generation += 1;
+      return { startedAt: Date.now(), generation };
+    },
+    // Applies only over an older-started validation of the same session; returns whether it applied.
+    refresh(id, { entitled, teams, company }, { startedAt, generation: gen }) {
+      if (gen <= (appliedGeneration.get(id) ?? 0)) return false;
+      const { changes } = db
+        .prepare(
+          'UPDATE app_sessions SET entitled = ?, teams = ?, company = ?, last_validated_at = ? WHERE id = ?',
+        )
+        .run(
+          entitled ? 1 : 0,
+          JSON.stringify(teams ?? []),
+          JSON.stringify(company ?? null),
+          startedAt,
+          id,
+        );
+      if (changes > 0) appliedGeneration.set(id, gen);
+      return changes > 0;
+    },
     delete(id) {
+      appliedGeneration.delete(id);
       db.prepare('DELETE FROM app_sessions WHERE id = ?').run(id);
     },
     deleteExpired() {
