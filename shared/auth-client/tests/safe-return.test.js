@@ -36,9 +36,11 @@ test('handleLaunch redirects to / for a protocol-relative return_to', async () =
   client._ctx.hubApi = { exchange: async () => ({ user: { id: 'u1' }, central_session_id: 'c1' }) };
   const app = express();
   app.get('/launch', client.handleLaunch);
+  const state = 'c'.repeat(64);
   const res = await request(app)
-    .get('/launch?token=t&return_to=https%3A%2F%2Fapp.test%2F%2Fevil.test%2Fx')
-    .set('Host', 'app.test');
+    .get(`/launch?token=t&state=${state}&return_to=https%3A%2F%2Fapp.test%2F%2Fevil.test%2Fx`)
+    .set('Host', 'app.test')
+    .set('Cookie', `__Host-raid_session_state=${state}`);
   assert.equal(res.status, 302);
   assert.equal(res.headers.location, '/');
 });

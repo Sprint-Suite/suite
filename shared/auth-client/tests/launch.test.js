@@ -4,12 +4,17 @@ const assert = require('node:assert/strict');
 const { createAuthClient } = require('../index.js');
 const { createHubApi } = require('../lib/hub-api.js');
 
+const STATE = 'b'.repeat(64);
+const STATE_COOKIE = `__Host-raid_session_state=${STATE}`;
+
+// Requests with a token carry a matching launch state, so they reach the exchange.
 function makeReq({ query = {}, path = '/auth/launch' } = {}) {
+  const q = query.token ? { ...query, state: STATE } : query;
   return {
-    query,
+    query: q,
     path,
-    originalUrl: path + '?' + new URLSearchParams(query).toString(),
-    headers: {},
+    originalUrl: path + '?' + new URLSearchParams(q).toString(),
+    headers: { cookie: STATE_COOKIE },
   };
 }
 function makeRes() {
@@ -29,8 +34,8 @@ function makeRes() {
         this.location = l;
       }
     },
-    setHeader(n, v) {
-      this.headers[n] = v;
+    append(n, v) {
+      (this.headers[n] ||= []).push(v);
     },
     send() {
       this.sent = true;
@@ -76,7 +81,7 @@ test('launch with valid token creates app_session and 302s', async () => {
   const res = makeRes();
   await client.handleLaunch(req, res);
   assert.equal(res.statusCode, 302);
-  assert.match(res.headers['Set-Cookie'], /^raid_session=/);
+  assert.ok(res.headers['Set-Cookie'].some((c) => c.startsWith('raid_session=')));
   assert.equal(res.location, '/');
 });
 
@@ -120,8 +125,11 @@ test('launch persists entitled+teams from the exchange onto the session', async 
   };
   const { createLaunchHandler } = require('../handlers/launch.js');
   const handleLaunch = createLaunchHandler(ctx);
-  const req = { query: { token: 'tok' }, headers: {} };
-  const res = { setHeader() {}, redirect() {} };
+  const req = {
+    query: { token: 'tok', state: STATE },
+    headers: { cookie: `__Host-poker_session_state=${STATE}` },
+  };
+  const res = { append() {}, redirect() {} };
 
   await handleLaunch(req, res);
 
@@ -149,8 +157,11 @@ test('launch persists company from the exchange onto the session', async () => {
   };
   const { createLaunchHandler } = require('../handlers/launch.js');
   const handleLaunch = createLaunchHandler(ctx);
-  const req = { query: { token: 'tok' }, headers: {} };
-  const res = { setHeader() {}, redirect() {} };
+  const req = {
+    query: { token: 'tok', state: STATE },
+    headers: { cookie: `__Host-poker_session_state=${STATE}` },
+  };
+  const res = { append() {}, redirect() {} };
 
   await handleLaunch(req, res);
 

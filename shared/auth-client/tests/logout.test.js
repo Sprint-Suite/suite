@@ -31,7 +31,7 @@ test('logout clears cookie, calls hub DELETE, 302 to hub', async () => {
   const req = { headers: { cookie: 'raid_session=c1' } };
   const res = {
     headers: {},
-    setHeader(n, v) {
+    append(n, v) {
       this.headers[n] = v;
     },
     redirect(c, l) {
@@ -71,7 +71,7 @@ test('logout with no cookie still clears + redirects (no hub call)', async () =>
   const req = { headers: {} };
   const res = {
     headers: {},
-    setHeader(n, v) {
+    append(n, v) {
       this.headers[n] = v;
     },
     redirect(c, l) {

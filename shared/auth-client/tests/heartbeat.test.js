@@ -32,7 +32,7 @@ function makeRes() {
       this.body = o;
     },
     end() {},
-    setHeader(n, v) {
+    append(n, v) {
       this.headers[n] = v;
     },
   };

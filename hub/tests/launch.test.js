@@ -85,3 +85,36 @@ test('GET /launch/:app (used after magic-link return_to) also works', async () =
   assert.match(res.headers.location, /https:\/\/sprintraid\.uk\/auth\/launch\?token=/);
   assert.match(res.headers.location, /return_to=/);
 });
+
+const STATE = 'a'.repeat(64);
+
+test('launch passes a valid state through', async () => {
+  const { app, db } = await buildWithLaunch();
+  const sid = await loggedInCookie(db);
+  const res = await request(app)
+    .get(`/launch/signal?state=${STATE}`)
+    .set('Cookie', `hub_session=${sid}`);
+  assert.equal(res.status, 302);
+  assert.ok(res.headers.location.includes(`&state=${STATE}`));
+});
+
+test('launch drops a malformed state', async () => {
+  const { app, db } = await buildWithLaunch();
+  const sid = await loggedInCookie(db);
+  const res = await request(app)
+    .get(`/launch/signal?state=${encodeURIComponent('../x')}`)
+    .set('Cookie', `hub_session=${sid}`);
+  assert.equal(res.status, 302);
+  assert.ok(!res.headers.location.includes('state='));
+});
+
+test('POST launch passes state from the body', async () => {
+  const { app, db } = await buildWithLaunch();
+  const sid = await loggedInCookie(db);
+  const res = await post(app, '/launch/signal')
+    .set('Cookie', `hub_session=${sid}`)
+    .type('form')
+    .send({ state: STATE });
+  assert.equal(res.status, 302);
+  assert.ok(res.headers.location.includes(`&state=${STATE}`));
+});

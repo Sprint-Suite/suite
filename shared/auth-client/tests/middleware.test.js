@@ -23,7 +23,7 @@ function makeRes() {
         this.location = l;
       }
     },
-    setHeader(n, v) {
+    append(n, v) {
       this[n] = v;
     },
   };
