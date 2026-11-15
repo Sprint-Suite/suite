@@ -1,0 +1,166 @@
+// tests/heartbeat-refresh.test.js
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { createAuthClient } = require('../index.js');
+const { createHubApi } = require('../lib/hub-api.js');
+
+const T0 = 1_800_000_000_000;
+const COOKIE = 'raid_session=a1';
+const REVOKED = { entitled: false, teams: [], company: null };
+
+function buildClient(t, heartbeat) {
+  t.mock.timers.enable({ apis: ['Date'], now: T0 });
+  const client = createAuthClient({
+    appName: 'raid',
+    hubBaseUrl: 'https://hub.test',
+    hubApiKey: 'k',
+    cookieName: 'raid_session',
+    dbPath: ':memory:',
+  });
+  client._ctx.hubApi = { heartbeat };
+  client._ctx.store.create({
+    id: 'a1',
+    userId: 'u1',
+    centralSessionId: 's1',
+    expiresAt: T0 + 24 * 60 * 60_000,
+    entitled: true,
+    teams: [{ id: 't1', name: 'Alpha', role: 'lead' }],
+    company: { id: 'c1' },
+  });
+  return client;
+}
+
+function advance(t, ms) {
+  t.mock.timers.setTime(Date.now() + ms);
+}
+
+function makeRes() {
+  return {
+    statusCode: 200,
+    headers: {},
+    status(s) {
+      this.statusCode = s;
+      return this;
+    },
+    json(o) {
+      this.body = o;
+    },
+    redirect(code, location) {
+      this.statusCode = code;
+      this.location = location;
+    },
+    setHeader(n, v) {
+      this.headers[n] = v;
+    },
+  };
+}
+
+async function runRequireAuth(client) {
+  const req = { headers: { cookie: COOKIE, host: 'app.test' }, originalUrl: '/x' };
+  const res = makeRes();
+  let nextCalled = false;
+  await client.requireAuth(req, res, () => {
+    nextCalled = true;
+  });
+  return { req, res, nextCalled };
+}
+
+test('requireAuth applies a revoked company on heartbeat', async (t) => {
+  const client = buildClient(t, async () => ({ status: 'ok', context: REVOKED }));
+  advance(t, 61_000);
+  const { req, nextCalled } = await runRequireAuth(client);
+  assert.equal(nextCalled, true);
+  assert.equal(req.user.company, null);
+  assert.equal(req.user.entitled, false);
+  assert.deepEqual(req.user.teams, []);
+  const row = client._ctx.store.get('a1');
+  assert.equal(row.company, null);
+  assert.equal(row.entitled, false);
+  assert.deepEqual(row.teams, []);
+  assert.equal(row.last_validated_at, Date.now());
+});
+
+test("an old hub's bare ok keeps the stored context", async (t) => {
+  const client = buildClient(t, async () => ({ status: 'ok', context: null }));
+  advance(t, 61_000);
+  const { req } = await runRequireAuth(client);
+  assert.deepEqual(req.user.company, { id: 'c1' });
+  assert.equal(req.user.entitled, true);
+  const row = client._ctx.store.get('a1');
+  assert.deepEqual(row.company, { id: 'c1' });
+  assert.equal(row.entitled, true);
+  assert.equal(row.teams.length, 1);
+  assert.equal(row.last_validated_at, Date.now());
+});
+
+test('unreachable hub leaves context untouched within grace', async (t) => {
+  const client = buildClient(t, async () => ({ status: 'unreachable', context: null }));
+  advance(t, 61_000);
+  const { req, nextCalled } = await runRequireAuth(client);
+  assert.equal(nextCalled, true);
+  assert.deepEqual(req.user.company, { id: 'c1' });
+  const row = client._ctx.store.get('a1');
+  assert.deepEqual(row.company, { id: 'c1' });
+  assert.equal(row.last_validated_at, T0);
+});
+
+test('handleHeartbeat refreshes context too', async (t) => {
+  const client = buildClient(t, async () => ({ status: 'ok', context: REVOKED }));
+  advance(t, 1_000);
+  const res = makeRes();
+  await client.handleHeartbeat({ method: 'POST', headers: { cookie: COOKIE } }, res);
+  assert.equal(res.statusCode, 200);
+  const row = client._ctx.store.get('a1');
+  assert.equal(row.company, null);
+  assert.equal(row.entitled, false);
+  assert.equal(row.last_validated_at, Date.now());
+});
+
+test('verifySession applies a revoked company', async (t) => {
+  const client = buildClient(t, async () => ({ status: 'ok', context: REVOKED }));
+  advance(t, 61_000);
+  const result = await client.verifySession(COOKIE);
+  assert.equal(result.company, null);
+  assert.equal(result.entitled, false);
+  assert.equal(client._ctx.store.get('a1').company, null);
+});
+
+test('verifySession returns null on expired', async (t) => {
+  const client = buildClient(t, async () => ({ status: 'expired', context: null }));
+  advance(t, 61_000);
+  assert.equal(await client.verifySession(COOKIE), null);
+  assert.equal(client._ctx.store.get('a1'), undefined);
+});
+
+test('verifySession keeps context during an outage within grace, and returns null after grace', async (t) => {
+  const client = buildClient(t, async () => ({ status: 'error', context: null }));
+  advance(t, 61_000);
+  const within = await client.verifySession(COOKIE);
+  assert.deepEqual(within.company, { id: 'c1' });
+  advance(t, 5 * 60_000);
+  assert.equal(await client.verifySession(COOKIE), null);
+  assert.equal(client._ctx.store.get('a1'), undefined);
+});
+
+test('hubApi.heartbeat maps a 200 body with entitlement to context', async () => {
+  const fetchImpl = async () => ({
+    status: 200,
+    json: async () => ({
+      ok: true,
+      entitlement: { entitled: true },
+      teams: [],
+      company: { id: 'c1', name: 'C' },
+    }),
+  });
+  const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl });
+  assert.deepEqual(await api.heartbeat('s1'), {
+    status: 'ok',
+    context: { entitled: true, teams: [], company: { id: 'c1', name: 'C' } },
+  });
+});
+
+test('hubApi.heartbeat gives a null context for a bare ok body', async () => {
+  const fetchImpl = async () => ({ status: 200, json: async () => ({ ok: true }) });
+  const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl });
+  assert.deepEqual(await api.heartbeat('s1'), { status: 'ok', context: null });
+});

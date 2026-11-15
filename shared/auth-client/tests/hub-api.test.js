@@ -39,8 +39,8 @@ test('heartbeat returns ok for 200, expired for 404', async () => {
     'POST /api/sessions/s2/heartbeat': async () => ({ status: 404, json: async () => ({}) }),
   });
   const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'test-key', fetchImpl: f });
-  assert.equal(await api.heartbeat('s1'), 'ok');
-  assert.equal(await api.heartbeat('s2'), 'expired');
+  assert.deepEqual(await api.heartbeat('s1'), { status: 'ok', context: null });
+  assert.deepEqual(await api.heartbeat('s2'), { status: 'expired', context: null });
 });
 
 test("heartbeat returns 'unreachable' on network error", async () => {
@@ -48,7 +48,7 @@ test("heartbeat returns 'unreachable' on network error", async () => {
     throw new Error('ECONNREFUSED');
   };
   const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl: f });
-  assert.equal(await api.heartbeat('s1'), 'unreachable');
+  assert.deepEqual(await api.heartbeat('s1'), { status: 'unreachable', context: null });
 });
 
 test('delete sends DELETE to hub', async () => {

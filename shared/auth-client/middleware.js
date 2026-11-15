@@ -1,40 +1,18 @@
 // middleware.js
 const { parseCookies, clearSessionCookie } = require('./lib/cookies.js');
+const { validateSession } = require('./lib/validate-session.js');
 
 function createRequireAuth(ctx) {
-  const { store, hubApi, cookieName, cookieDomain, hubBaseUrl, cacheTtlMs, graceMs } = ctx;
+  const { cookieName, cookieDomain, hubBaseUrl } = ctx;
 
   return async function requireAuth(req, res, next) {
-    const cookies = parseCookies(req.headers.cookie);
-    const cookieVal = cookies[cookieName];
-    if (!cookieVal) return bounceToHub(req, res);
-    const sess = store.get(cookieVal);
-    if (!sess) return bounceToHub(req, res);
-
-    const t = Date.now();
-    const age = t - sess.last_validated_at;
-    if (age < cacheTtlMs) {
+    const cookieVal = parseCookies(req.headers.cookie)[cookieName];
+    const { outcome, sess } = await validateSession(ctx, cookieVal);
+    if (outcome === 'valid') {
       attachUser(req, sess);
       return next();
     }
-
-    const result = await hubApi.heartbeat(sess.central_session_id);
-    if (result === 'ok') {
-      store.touch(cookieVal);
-      attachUser(req, sess);
-      return next();
-    }
-    if (result === 'expired') {
-      store.delete(cookieVal);
-      clearSessionCookie(res, { name: cookieName, domain: cookieDomain });
-      return bounceToHub(req, res);
-    }
-    if (age < cacheTtlMs + graceMs) {
-      attachUser(req, sess);
-      return next();
-    }
-    store.delete(cookieVal);
-    clearSessionCookie(res, { name: cookieName, domain: cookieDomain });
+    if (sess) clearSessionCookie(res, { name: cookieName, domain: cookieDomain });
     return bounceToHub(req, res);
   };
 

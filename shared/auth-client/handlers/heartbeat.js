@@ -1,5 +1,6 @@
 // handlers/heartbeat.js
 const { parseCookies, clearSessionCookie } = require('../lib/cookies.js');
+const { applyHeartbeatOk } = require('../lib/validate-session.js');
 
 function createHeartbeatHandler(ctx) {
   return async function handleHeartbeat(req, res) {
@@ -7,12 +8,12 @@ function createHeartbeatHandler(ctx) {
     if (!cookieVal) return res.status(401).json({ error: 'no_session' });
     const sess = ctx.store.get(cookieVal);
     if (!sess) return res.status(401).json({ error: 'no_session' });
-    const result = await ctx.hubApi.heartbeat(sess.central_session_id);
-    if (result === 'ok') {
-      ctx.store.touch(cookieVal);
+    const { status, context } = await ctx.hubApi.heartbeat(sess.central_session_id);
+    if (status === 'ok') {
+      applyHeartbeatOk(ctx.store, cookieVal, sess, context);
       return res.status(200).json({ ok: true });
     }
-    if (result === 'expired') {
+    if (status === 'expired') {
       ctx.store.delete(cookieVal);
       clearSessionCookie(res, { name: ctx.cookieName, domain: ctx.cookieDomain });
       return res.status(401).json({ error: 'expired' });

@@ -81,6 +81,17 @@ function createSessionsStore(dbPath) {
     touch(id) {
       db.prepare('UPDATE app_sessions SET last_validated_at = ? WHERE id = ?').run(Date.now(), id);
     },
+    refresh(id, { entitled, teams, company }) {
+      db.prepare(
+        'UPDATE app_sessions SET entitled = ?, teams = ?, company = ?, last_validated_at = ? WHERE id = ?',
+      ).run(
+        entitled ? 1 : 0,
+        JSON.stringify(teams ?? []),
+        JSON.stringify(company ?? null),
+        Date.now(),
+        id,
+      );
+    },
     delete(id) {
       db.prepare('DELETE FROM app_sessions WHERE id = ?').run(id);
     },

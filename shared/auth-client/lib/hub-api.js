@@ -1,4 +1,15 @@
 // lib/hub-api.js
+// A hub that predates heartbeat context answers a bare { ok: true }; that yields null.
+async function readHeartbeatContext(res) {
+  const body = await res.json().catch(() => null);
+  if (!body || !body.entitlement) return null;
+  return {
+    entitled: body.entitlement.entitled === true,
+    teams: Array.isArray(body.teams) ? body.teams : [],
+    company: body.company ?? null,
+  };
+}
+
 function createHubApi({ baseUrl, apiKey, appName, fetchImpl = globalThis.fetch }) {
   const headers = {
     Authorization: `Bearer ${apiKey}`,
@@ -20,11 +31,11 @@ function createHubApi({ baseUrl, apiKey, appName, fetchImpl = globalThis.fetch }
           method: 'POST',
           headers,
         });
-        if (res.status === 200) return 'ok';
-        if (res.status === 404) return 'expired';
-        return 'error';
+        if (res.status === 200) return { status: 'ok', context: await readHeartbeatContext(res) };
+        if (res.status === 404) return { status: 'expired', context: null };
+        return { status: 'error', context: null };
       } catch {
-        return 'unreachable';
+        return { status: 'unreachable', context: null };
       }
     },
     async consume(centralSessionId) {
