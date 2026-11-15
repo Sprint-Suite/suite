@@ -301,3 +301,26 @@ test('validations started in the same millisecond reject the earlier-started res
   assert.equal((await older).entitled, false);
   assert.equal(client._ctx.store.get('a1').entitled, false);
 });
+
+test('a burst of failed validations does not push freshness into the future', async (t) => {
+  let outcome = 'unreachable';
+  const client = buildClient(t, async () =>
+    outcome === 'ok'
+      ? { status: 'ok', context: ENTITLED }
+      : { status: 'unreachable', context: null },
+  );
+  client._ctx.store.create({
+    id: 'b1',
+    userId: 'u2',
+    centralSessionId: 's2',
+    expiresAt: T0 + 24 * 60 * 60_000,
+    entitled: true,
+    teams: [],
+    company: { id: 'c1' },
+  });
+  advance(t, 61_000);
+  for (let i = 0; i < 1000; i++) await client.verifySession(COOKIE);
+  outcome = 'ok';
+  await client.verifySession('raid_session=b1');
+  assert.equal(client._ctx.store.get('b1').last_validated_at, T0 + 61_000);
+});

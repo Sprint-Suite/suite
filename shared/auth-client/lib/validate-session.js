@@ -4,8 +4,8 @@
 
 // A response older than the last applied validation is dropped in favour of the stored row,
 // which is undefined if a newer validation deleted the session.
-function applyHeartbeatOk(store, sess, context, startedAt) {
-  if (store.refresh(sess.id, context, startedAt)) return { ...sess, ...context };
+function applyHeartbeatOk(store, sess, context, stamp) {
+  if (store.refresh(sess.id, context, stamp)) return { ...sess, ...context };
   return store.get(sess.id);
 }
 
@@ -15,7 +15,8 @@ function applyHeartbeatFailure(ctx, cookieVal, status) {
   const current = ctx.store.get(cookieVal);
   if (!current) return { outcome: 'invalid', sess: null };
   const age = Date.now() - current.last_validated_at;
-  if (status !== 'expired' && age < ctx.cacheTtlMs + ctx.graceMs) return { outcome: 'valid', sess: current };
+  if (status !== 'expired' && age < ctx.cacheTtlMs + ctx.graceMs)
+    return { outcome: 'valid', sess: current };
   ctx.store.delete(cookieVal);
   return { outcome: 'invalid', sess: current };
 }
@@ -25,10 +26,10 @@ async function validateSession(ctx, cookieVal) {
   if (!sess) return { outcome: 'invalid', sess: null };
   if (Date.now() - sess.last_validated_at < ctx.cacheTtlMs) return { outcome: 'valid', sess };
 
-  const startedAt = ctx.store.nextValidationStamp();
+  const stamp = ctx.store.beginValidation();
   const { status, context } = await ctx.hubApi.heartbeat(sess.central_session_id);
   if (status !== 'ok') return applyHeartbeatFailure(ctx, cookieVal, status);
-  const current = applyHeartbeatOk(ctx.store, sess, context, startedAt);
+  const current = applyHeartbeatOk(ctx.store, sess, context, stamp);
   return current ? { outcome: 'valid', sess: current } : { outcome: 'invalid', sess };
 }
 

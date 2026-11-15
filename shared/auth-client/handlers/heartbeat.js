@@ -8,9 +8,9 @@ function createHeartbeatHandler(ctx) {
     if (!cookieVal) return res.status(401).json({ error: 'no_session' });
     const sess = ctx.store.get(cookieVal);
     if (!sess) return res.status(401).json({ error: 'no_session' });
-    const startedAt = ctx.store.nextValidationStamp();
+    const stamp = ctx.store.beginValidation();
     const { status, context } = await ctx.hubApi.heartbeat(sess.central_session_id);
-    if (status === 'ok' && applyHeartbeatOk(ctx.store, sess, context, startedAt)) {
+    if (status === 'ok' && applyHeartbeatOk(ctx.store, sess, context, stamp)) {
       return res.status(200).json({ ok: true });
     }
     if (status === 'ok' || status === 'expired') {
