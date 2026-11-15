@@ -238,3 +238,66 @@ test('heartbeat fetch has a timeout', async (t) => {
   assert.deepEqual(await api.heartbeat('s1'), { status: 'unreachable', context: null });
   assert.deepEqual(requested, [5000]);
 });
+
+function deferredOutcomes() {
+  const pending = [];
+  const heartbeat = () =>
+    new Promise((resolve) => {
+      pending.push((status, context = null) => resolve({ status, context }));
+    });
+  return { heartbeat, pending };
+}
+
+test('an older unreachable heartbeat returns the newer revoked state', async (t) => {
+  const { heartbeat, pending } = deferredOutcomes();
+  const client = buildClient(t, heartbeat);
+  advance(t, 61_000);
+  const older = client.verifySession(COOKIE);
+  advance(t, 1);
+  const newer = client.verifySession(COOKIE);
+  pending[1]('ok', REVOKED);
+  await newer;
+  pending[0]('unreachable');
+  const result = await older;
+  assert.equal(result.entitled, false);
+  assert.equal(result.company, null);
+});
+
+test('an older unreachable heartbeat does not revive a session a newer one expired', async (t) => {
+  const { heartbeat, pending } = deferredOutcomes();
+  const client = buildClient(t, heartbeat);
+  advance(t, 61_000);
+  const older = client.verifySession(COOKIE);
+  advance(t, 1);
+  const newer = client.verifySession(COOKIE);
+  pending[1]('expired');
+  assert.equal(await newer, null);
+  pending[0]('unreachable');
+  assert.equal(await older, null);
+});
+
+test('validations started in the same millisecond keep the later-started result', async (t) => {
+  const { heartbeat, pending } = deferredHeartbeats();
+  const client = buildClient(t, heartbeat);
+  advance(t, 61_000);
+  const older = client.verifySession(COOKIE);
+  const newer = client.verifySession(COOKIE);
+  pending[0](ENTITLED);
+  await older;
+  pending[1](REVOKED);
+  assert.equal((await newer).entitled, false);
+  assert.equal(client._ctx.store.get('a1').entitled, false);
+});
+
+test('validations started in the same millisecond reject the earlier-started result', async (t) => {
+  const { heartbeat, pending } = deferredHeartbeats();
+  const client = buildClient(t, heartbeat);
+  advance(t, 61_000);
+  const older = client.verifySession(COOKIE);
+  const newer = client.verifySession(COOKIE);
+  pending[1](REVOKED);
+  await newer;
+  pending[0](ENTITLED);
+  assert.equal((await older).entitled, false);
+  assert.equal(client._ctx.store.get('a1').entitled, false);
+});

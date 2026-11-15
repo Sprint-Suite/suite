@@ -9,22 +9,27 @@ function applyHeartbeatOk(store, sess, context, startedAt) {
   return store.get(sess.id);
 }
 
+// Grace is judged on the row as it stands once the heartbeat returns, so a newer validation's
+// revocation or deletion wins over this one's stale snapshot.
+function applyHeartbeatFailure(ctx, cookieVal, status) {
+  const current = ctx.store.get(cookieVal);
+  if (!current) return { outcome: 'invalid', sess: null };
+  const age = Date.now() - current.last_validated_at;
+  if (status !== 'expired' && age < ctx.cacheTtlMs + ctx.graceMs) return { outcome: 'valid', sess: current };
+  ctx.store.delete(cookieVal);
+  return { outcome: 'invalid', sess: current };
+}
+
 async function validateSession(ctx, cookieVal) {
   const sess = cookieVal ? ctx.store.get(cookieVal) : undefined;
   if (!sess) return { outcome: 'invalid', sess: null };
+  if (Date.now() - sess.last_validated_at < ctx.cacheTtlMs) return { outcome: 'valid', sess };
 
-  const age = Date.now() - sess.last_validated_at;
-  if (age < ctx.cacheTtlMs) return { outcome: 'valid', sess };
-
-  const startedAt = Date.now();
+  const startedAt = ctx.store.nextValidationStamp();
   const { status, context } = await ctx.hubApi.heartbeat(sess.central_session_id);
-  if (status === 'ok') {
-    const current = applyHeartbeatOk(ctx.store, sess, context, startedAt);
-    return current ? { outcome: 'valid', sess: current } : { outcome: 'invalid', sess };
-  }
-  if (status !== 'expired' && age < ctx.cacheTtlMs + ctx.graceMs) return { outcome: 'valid', sess };
-  ctx.store.delete(cookieVal);
-  return { outcome: 'invalid', sess };
+  if (status !== 'ok') return applyHeartbeatFailure(ctx, cookieVal, status);
+  const current = applyHeartbeatOk(ctx.store, sess, context, startedAt);
+  return current ? { outcome: 'valid', sess: current } : { outcome: 'invalid', sess };
 }
 
 module.exports = { validateSession, applyHeartbeatOk };

@@ -34,6 +34,7 @@ function createSessionsStore(dbPath) {
     db.exec("ALTER TABLE app_sessions ADD COLUMN teams TEXT NOT NULL DEFAULT '[]'");
   if (!cols.includes('company'))
     db.exec("ALTER TABLE app_sessions ADD COLUMN company TEXT NOT NULL DEFAULT 'null'");
+  let lastStamp = 0;
   return {
     create({
       id,
@@ -80,6 +81,11 @@ function createSessionsStore(dbPath) {
     },
     touch(id) {
       db.prepare('UPDATE app_sessions SET last_validated_at = ? WHERE id = ?').run(Date.now(), id);
+    },
+    // Strictly increasing per store, so validations started in the same millisecond still order.
+    nextValidationStamp() {
+      lastStamp = Math.max(Date.now(), lastStamp + 1);
+      return lastStamp;
     },
     // Stamps startedAt and applies only over an older validation start; returns whether it applied.
     refresh(id, { entitled, teams, company }, startedAt) {
