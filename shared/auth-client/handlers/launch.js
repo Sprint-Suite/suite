@@ -13,7 +13,8 @@ const { randomBytes } = require('node:crypto');
 const LAUNCH_FAILED =
   'Sign-in could not be completed. Please return to the Sprint Suite dashboard and try again.';
 
-function rejectLaunch(res) {
+async function rejectLaunch(ctx, res, token) {
+  await consumeToken(ctx, token);
   res.status(400).type('text/plain').send(LAUNCH_FAILED);
 }
 
@@ -44,7 +45,7 @@ async function checkLaunchState(ctx, req, res, token) {
   }
   clearStateCookie(res, { cookieName: ctx.cookieName });
   if (queryState !== undefined && statesMatch(queryState, cookieState)) return true;
-  rejectLaunch(res);
+  await rejectLaunch(ctx, res, token);
   return false;
 }
 

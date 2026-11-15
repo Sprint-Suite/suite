@@ -52,7 +52,11 @@ function assertStateCleared(res) {
   assert.doesNotMatch(del, /Domain=/i);
 }
 
-function assertRejected(res) {
+function assertRejected(res, { counter, sessionsCreated, token }) {
+  assert.equal(counter.exchanges, 1);
+  assert.deepEqual(counter.tokens, [token]);
+  assert.equal(sessionsCreated.length, 0);
+  assert.ok(!cookies(res).some((c) => c.startsWith('raid_session=')), 'session cookie set');
   assert.equal(res.status, 400);
   assert.match(res.headers['content-type'], /^text\/plain/);
   assert.equal(res.text, COPY);
@@ -148,37 +152,34 @@ test('matching state exchanges and clears the cookie', async () => {
   assertStateCleared(res);
 });
 
-test('attacker token with mismatched state is rejected without exchange', async () => {
-  const { app, counter } = build();
+test('attacker token with mismatched state is burned and rejected', async () => {
+  const { app, counter, sessionsCreated } = build();
   const res = await request(app)
     .get(`/auth/launch?token=attacker&state=${newState()}`)
     .set('Host', 'app.test')
     .set('Cookie', `${STATE_COOKIE}=${newState()}`);
-  assertRejected(res);
-  assert.equal(counter.exchanges, 0);
+  assertRejected(res, { counter, sessionsCreated, token: 'attacker' });
 });
 
-test('stateless launch with a stale state cookie fails once', async () => {
-  const { app, counter } = build();
+test('stateless launch with a stale state cookie burns the token and fails once', async () => {
+  const { app, counter, sessionsCreated } = build();
   const first = await request(app)
     .get('/auth/launch?token=t')
     .set('Host', 'app.test')
     .set('Cookie', `${STATE_COOKIE}=${newState()}`);
-  assertRejected(first);
-  assert.equal(counter.exchanges, 0);
+  assertRejected(first, { counter, sessionsCreated, token: 't' });
   const second = await request(app).get('/auth/launch?token=t').set('Host', 'app.test');
   assert.equal(second.status, 302);
   assert.match(second.headers.location, /^https:\/\/hub\/launch\/raid\?state=/);
-  assert.equal(counter.exchanges, 1);
+  assert.equal(counter.exchanges, 2);
 });
 
-test('state param without any cookie is rejected', async () => {
-  const { app, counter } = build();
+test('state param without any cookie burns the token and is rejected', async () => {
+  const { app, counter, sessionsCreated } = build();
   const res = await request(app)
     .get(`/auth/launch?token=t&state=${newState()}`)
     .set('Host', 'app.test');
-  assertRejected(res);
-  assert.equal(counter.exchanges, 0);
+  assertRejected(res, { counter, sessionsCreated, token: 't' });
 });
 
 test('missing token clears the state cookie', async () => {
