@@ -4,7 +4,7 @@
 
 **Goal:** Close the three shared-auth security Majors from the 2026-11-15 Signal review: open redirect after launch, login CSRF on launch, and stale company/entitlement after revocation. Every app on `@suite/auth-client` benefits.
 
-**Architecture:** `handleLaunch` builds its redirect only from a validated same-origin path. A launch is accepted only with a `state` value matching a short-lived, HttpOnly state cookie that the app set itself. A launch without state (hub dashboard tiles, magic links) is not exchanged; the app restarts it through `${hub}/launch/<app>?state=…` from the browser's own hub session. The hub passes `state` through unchanged. The heartbeat answers with the user's current entitlement, teams and company for the calling app, and the client overwrites its stored copy on every successful heartbeat.
+**Architecture:** `handleLaunch` builds its redirect only from a validated same-origin path. A launch is accepted only with a `state` value matching a short-lived, HttpOnly state cookie that the app set itself. A launch without state (hub dashboard tiles, magic links) never becomes a session: its token is consumed via exchange and discarded, and the app restarts it through `${hub}/launch/<app>?state=…` from the browser's own hub session. The hub passes `state` through unchanged. The heartbeat answers with the user's current entitlement, teams and company for the calling app, and the client overwrites its stored copy on every successful heartbeat.
 
 **Tech Stack:** Node 20; hub is ESM Express 5 + better-sqlite3 (`hub/`); auth-client is CommonJS (`shared/auth-client/`); `node --test` + supertest.
 
@@ -26,7 +26,7 @@
 ## Review Focus
 
 1. **Stale state cookie, then a dashboard-tile launch** within 120 s of an abandoned attempt: one 400, cookie cleared, the next tile click succeeds. Pinned in Task 4.
-2. **Attacker token + attacker state** sent to a victim: 400 and no exchange call. Pinned in Task 4.
+2. **Attacker token + attacker state** sent to a victim: 400, the presented token is consumed and discarded, and no session is created. Pinned in Task 4.
 3. **`return_to` shapes:** `//evil/x`, `/\evil`, `https://app//evil`, `https://other-host/`, a relative path and garbage all redirect to `/`, or to the safe path. Pinned in Task 1.
 4. **Member removed from their company, then the app's next heartbeat:** `req.user.company` becomes `null` and `entitled` reflects the hub. Pinned in Tasks 2 and 3.
 5. **Hub unreachable during a heartbeat:** the stored context is left untouched (grace behaviour unchanged). Pinned in Task 3.
@@ -80,14 +80,14 @@
 **Interfaces:**
 - Consumes: the Task 2 response body.
 - Produces:
-  - `hubApi.heartbeat(id) => { status: "ok"|"expired"|"error"|"unreachable", context: {entitled, teams, company} | null }`. `context` is non-null only on `ok` when the body carries `entitlement`; `entitled` is `entitlement?.entitled === true`.
-  - `store.refresh(id, { entitled, teams, company })` updates those three columns and `last_validated_at`.
-  - `validateSession(ctx, cookieVal) => { outcome: "valid"|"invalid", sess }`. It applies today's cache, heartbeat and grace rules. On a heartbeat `ok` it calls `store.refresh` when `context` is non-null and `store.touch` otherwise, and the returned `sess` carries the refreshed values. It deletes the stored session on `expired`, and on an outage once grace has run out.
-  - `requireAuth` and `verifySession` both delegate to `validateSession`. `requireAuth` keeps its redirect and cookie-clearing behaviour, and `verifySession` keeps returning a context or `null`. `handleHeartbeat` (which always heartbeats) applies the same `refresh`/`touch` rule.
+  - `hubApi.heartbeat(id) => { status: "ok"|"expired"|"error"|"unreachable", context: {entitled, teams, company} | null }`. `status: "ok"` always carries a context (`entitled` is `entitlement.entitled === true`). A 200 without an `entitlement` object is `status: "error"` and is grace-bounded. The heartbeat fetch times out after 5 s and maps to `unreachable`.
+  - `store.refresh(id, context, startedAt)` updates those three columns and stamps `last_validated_at = startedAt`. It applies only when the stored `last_validated_at` is strictly older than `startedAt`, re-reading the row on conflict.
+  - `validateSession(ctx, cookieVal) => { outcome: "valid"|"invalid", sess }`. It applies today's cache, heartbeat and grace rules. On a heartbeat `ok` it calls `store.refresh` with the context, and the returned `sess` carries the refreshed values. It deletes the stored session on `expired`, and on an outage once grace has run out.
+  - `requireAuth` and `verifySession` both delegate to `validateSession`. `requireAuth` keeps its redirect and cookie-clearing behaviour, and `verifySession` keeps returning a context or `null`. `handleHeartbeat` (which always heartbeats) applies the same `refresh` rule.
 
 - [ ] **Step 1: Write failing tests**. Use a store on `:memory:` and a fake `hubApi` injected through `client._ctx`, with the session's `last_validated_at` older than `cacheTtlMs`:
   - `requireAuth applies a revoked company on heartbeat`: the stored company is `{id:"c1"}`, and the fake returns `{status:"ok", context:{entitled:false, teams:[], company:null}}`. Afterwards `req.user.company === null`, `req.user.entitled === false`, and the stored row matches.
-  - `an old hub's bare ok keeps the stored context`: the fake returns `{status:"ok", context:null}`. The context is unchanged and `last_validated_at` has advanced.
+  - `an old hub's bare ok is treated as an error`: the hub answers 200 without `entitlement`, so the status is `error`. The context is unchanged within grace and `last_validated_at` has not advanced.
   - `unreachable hub leaves context untouched within grace`.
   - `handleHeartbeat refreshes context too`: the same assertion via `POST` to the handler.
   - `verifySession applies a revoked company`: returns `company: null`, `entitled: false`.
@@ -111,10 +111,10 @@
 - Produces (`lib/launch-state.js`):
   - `newState() => string` (64 hex).
   - `statesMatch(a: unknown, b: unknown) => boolean`. It returns false unless both are 64-hex strings, then compares with `timingSafeEqual`.
-- `handleLaunch` decision, in this order and before any `exchange` call:
-  1. `state` query present: clear the state cookie. If it doesn't match the cookie, send 400 with the exact copy. Otherwise continue to exchange as today, then redirect via `safeReturnPath`.
-  2. `state` absent and a state cookie present: clear it and send 400 with the exact copy.
-  3. `state` absent and no cookie: set a new state cookie and 302 to `${hubBaseUrl}/launch/${appName}?state=<s>`, adding `&return_to=<encoded original return_to>` when one was given. Do not exchange the token.
+- `handleLaunch` decision, in this order:
+  1. `state` query present: clear the state cookie. If it doesn't match the cookie, consume the presented token via exchange (result discarded, errors ignored) and send 400 with the exact copy. Otherwise continue to exchange as today, then redirect via `safeReturnPath`.
+  2. `state` absent and a state cookie present: clear it, consume the presented token via exchange (result discarded) and send 400 with the exact copy.
+  3. `state` absent and no cookie: set a new state cookie and 302 to `${hubBaseUrl}/launch/${appName}?state=<s>`, adding `&return_to=<encoded original return_to>` when one was given. The presented token is consumed via exchange and discarded (no session) before the restart.
 
 - [ ] **Step 1: Write failing tests.**
   - Hub (`launch.test.js`):
@@ -122,12 +122,12 @@
     - `launch drops a malformed state`: `state=../x` gives a `location` without `state=`.
     - `POST launch passes state from the body`.
   - Client (`launch-state.test.js`), with a counting fake `exchange`:
-    - `stateless launch restarts via the hub without exchanging`: 302 to `https://hub/launch/<app>?state=` plus 64 hex chars, and an exchange count of 0. It emits a `Set-Cookie` that starts `__Host-<cookieName>_state=` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and `Max-Age=120`, and with **no** `Domain`, even when the client was built with `cookieDomain: "example.test"`.
+    - `stateless launch consumes the token and restarts via the hub`: 302 to `https://hub/launch/<app>?state=` plus 64 hex chars, an exchange count of 1 and no session row. It emits a `Set-Cookie` that starts `__Host-<cookieName>_state=` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and `Max-Age=120`, and with **no** `Domain`, even when the client was built with `cookieDomain: "example.test"`.
     - `restart preserves return_to`.
     - `matching state exchanges and clears the cookie`: 302 to the safe path and an exchange count of 1. There are **two** `Set-Cookie` headers: the session cookie, and the deletion of `__Host-<cookieName>_state` with `Max-Age=0`, `Secure` and `Path=/`, and no `Domain`. Browsers ignore a `__Host-` deletion that lacks `Secure`, and today's `clearSessionCookie` omits it. Every 400 path asserts the same deletion attributes.
-    - `attacker token with mismatched state is rejected without exchange`: 400 with the exact copy and an exchange count of 0.
-    - `stateless launch with a stale state cookie fails once`: 400 and the cookie cleared. A second stateless request with no cookie restarts (302).
-    - `state param without any cookie is rejected`: 400.
+    - `attacker token with mismatched state is burned and rejected`: 400 with the exact copy, an exchange count of 1 with that token, and no session.
+    - `stateless launch with a stale state cookie fails once`: 400, the token consumed and the cookie cleared. A second stateless request with no cookie restarts (302).
+    - `state param without any cookie is rejected`: 400, the token consumed.
 - [ ] **Step 2:** Run both new test files. Expected: FAIL.
 - [ ] **Step 3:** Implement the hub pass-through, then the client.
 - [ ] **Step 4:** Run the hub `npm test`, the auth-client `npm test`, and the Signal `npm test`. Expected: PASS. In Signal, update any test that drives `/auth/launch` directly so it sends a matching state cookie and parameter.
