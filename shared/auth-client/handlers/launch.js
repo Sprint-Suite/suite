@@ -1,5 +1,6 @@
 // handlers/launch.js
 const { setSessionCookie } = require('../lib/cookies.js');
+const { safeReturnPath } = require('../lib/safe-return.js');
 const { randomBytes } = require('node:crypto');
 
 function createLaunchHandler(ctx) {
@@ -25,13 +26,7 @@ function createLaunchHandler(ctx) {
       company: info.company || null,
     });
     setSessionCookie(res, { name: ctx.cookieName, value: sessionId, domain: ctx.cookieDomain });
-    let dest = '/';
-    if (req.query.return_to) {
-      try {
-        const u = new URL(req.query.return_to);
-        if (req.headers.host && u.host === req.headers.host) dest = u.pathname + u.search;
-      } catch {}
-    }
+    const dest = safeReturnPath(req.query.return_to, req.headers.host);
     res.redirect(302, dest);
   };
 }
