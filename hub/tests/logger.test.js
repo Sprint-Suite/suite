@@ -63,3 +63,16 @@ test('safeUrl does not throw on malformed percent-encoding', () => {
   const out = safeUrl('/x?%E0=1&token=abc');
   assert.equal(out, '/x?%E0=1&token=[redacted]');
 });
+
+test('safeUrl masks the launch state param', () => {
+  const state = 'a'.repeat(64);
+  const out = safeUrl(`/launch/signal?state=${state}&return_to=x`);
+  assert.equal(out, '/launch/signal?state=[redacted]&return_to=x');
+});
+
+test('safeUrl redacts central session ids in session API paths', () => {
+  assert.equal(safeUrl('/api/sessions/abc123/heartbeat'), '/api/sessions/[redacted]/heartbeat');
+  assert.equal(safeUrl('/api/sessions/abc123'), '/api/sessions/[redacted]');
+  assert.equal(safeUrl('/api/sessions/abc123?x=1'), '/api/sessions/[redacted]?x=1');
+  assert.equal(safeUrl('/api/sessions/exchange'), '/api/sessions/exchange');
+});

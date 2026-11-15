@@ -11,7 +11,16 @@ import { pino } from 'pino';
 export const REDACT_PATHS = ['token', '*.token', 'password', '*.password'];
 
 // Query-string keys whose values are masked by safeUrl (e.g. magic-link tokens).
-const SENSITIVE_QUERY = new Set(['token', 'password']);
+const SENSITIVE_QUERY = new Set(['token', 'password', 'state']);
+
+// The id in /api/sessions/:id[/heartbeat] equals the user's hub_session cookie value.
+const SESSION_PATH = /^(\/api\/sessions\/)([^/]+)(\/heartbeat)?(\/?)$/i;
+
+function safePath(path) {
+  return path.replace(SESSION_PATH, (match, prefix, id, heartbeat = '', slash) =>
+    id.toLowerCase() === 'exchange' ? match : `${prefix}[redacted]${heartbeat}${slash}`,
+  );
+}
 
 function queryKeyName(key) {
   try {
@@ -21,15 +30,15 @@ function queryKeyName(key) {
   }
 }
 
-// Mask sensitive query param values in a URL while preserving the path,
+// Mask sensitive query param values and session-id path segments in a URL while preserving
 // every other param byte-for-byte, and any #fragment. Uses targeted
 // replacement (not a URLSearchParams round-trip) so the sentinel stays
 // readable as "[redacted]" and nothing else is re-encoded.
 export function safeUrl(url) {
   if (typeof url !== 'string') return url;
   const q = url.indexOf('?');
-  if (q === -1) return url;
-  const path = url.slice(0, q);
+  if (q === -1) return safePath(url);
+  const path = safePath(url.slice(0, q));
   const query = url.slice(q + 1);
   const masked = query.replace(/([^&=#?]+)=([^&#]*)/g, (match, key, _val) =>
     SENSITIVE_QUERY.has(queryKeyName(key)) ? `${key}=[redacted]` : match,
