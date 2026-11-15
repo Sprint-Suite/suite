@@ -3,10 +3,6 @@
 // deleted, or null when there was none to begin with.
 
 function applyHeartbeatOk(store, cookieVal, sess, context) {
-  if (!context) {
-    store.touch(cookieVal);
-    return sess;
-  }
   store.refresh(cookieVal, context);
   return { ...sess, ...context };
 }

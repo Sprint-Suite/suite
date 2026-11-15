@@ -58,6 +58,7 @@ function createLaunchHandler(ctx) {
   return async function handleLaunch(req, res) {
     const token = req.query?.token;
     if (!token || typeof token !== 'string') {
+      clearStateCookie(res, { cookieName: ctx.cookieName });
       return res.status(400).send('Missing launch token');
     }
     if (!checkLaunchState(ctx, req, res)) return;

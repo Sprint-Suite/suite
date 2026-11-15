@@ -14,7 +14,7 @@
 
 - Work on a branch `fix/auth-launch-hardening` off `main` in `/var/www/suite`; ship by PR.
 - Hub routes, response bodies and status codes not named here stay unchanged. A new field in a JSON response is allowed; a removed or renamed one is not.
-- **Deploy order:** hub first, then restart every app that loads `@suite/auth-client` (Signal, Retrospective, Scrum Poker, RAID). The client tolerates an old hub's heartbeat. An old hub drops `state`, so the client's launch flow then fails closed with the 400 below, never a loop.
+- **Deploy order:** hub first, then restart every app that loads `@suite/auth-client` (Signal, Retrospective, Scrum Poker, RAID). With an old hub the client treats every heartbeat as an error, so sessions end after the grace period, and launches fail closed with the 400. **Rollback order:** roll back the apps first, then the hub.
 - State: 32 random bytes as 64 lowercase hex chars; cookie `__Host-${cookieName}_state`, `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=120`, and **never** a `Domain` attribute, whatever `cookieDomain` is. The `__Host-` prefix stops a sibling subdomain planting it. Compared with `crypto.timingSafeEqual`. Cleared on every launch outcome.
 - Every cookie write in `lib/cookies.js` **appends** a `Set-Cookie` header (`res.append`) instead of replacing one. A launch that sets the session and clears the state must emit both headers.
 - Revocation bound: about `cacheTtlMs` (60 s) while the hub is reachable, up to `cacheTtlMs + graceMs` (about 6 min) while it is not. **Not covered:** WebSocket connections that are already open (Retrospective, Scrum Poker) keep their context until they reconnect. That is a recorded limitation for a follow-up, not part of this plan.
@@ -144,5 +144,5 @@ Run each check against Signal and against one WebSocket app (Retrospective):
 3. In browser A, start a launch from the tile and, with DevTools set to preserve the log, copy both `/auth/launch` URLs:
    - **3a.** Copy the second one, which carries `state=`, into browser B. B shows the 400 copy.
    - **3b.** Copy the first one, which has no `state`, into browser B. B restarts through its own hub session (sign-in, or B's own account). B must **never** end up signed in as A.
-4. A stale tab: abandon a launch, then within 2 minutes click a tile → one 400, then the next tile click works.
+4. A stale tab: abandon a launch, then within 2 minutes click a tile → one 400, then the next tile click works. Also double-click one tile (two overlapping launches of the same app): both may show the 400; the next single click must work.
 5. In the hub console, remove a test member from a company. Within about 60 s the member's next app request has no company (Signal: "No company is associated with your session").

@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const { createSessionsStore } = require('../lib/sessions-db.js');
 const { createVerifySession } = require('../lib/verify-session.js');
 
-function ctxWith(store, heartbeat = async () => ({ status: 'ok', context: null })) {
+function ctxWith(
+  store,
+  heartbeat = async () => ({ status: 'ok', context: { entitled: true, teams: [], company: null } }),
+) {
   return {
     store,
     hubApi: { heartbeat },
@@ -27,7 +30,7 @@ test('returns context for a fresh session (no hub call)', async () => {
   const verifySession = createVerifySession(
     ctxWith(store, async () => {
       called = true;
-      return { status: 'ok', context: null };
+      return { status: 'ok', context: { entitled: true, teams: [], company: null } };
     }),
   );
   const res = await verifySession('poker_session=s1');

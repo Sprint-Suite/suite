@@ -34,13 +34,45 @@ test('heartbeat returns ok for 200, expired for 404', async () => {
   const f = mockFetch({
     'POST /api/sessions/s1/heartbeat': async () => ({
       status: 200,
-      json: async () => ({ ok: true }),
+      json: async () => ({
+        ok: true,
+        entitlement: { entitled: true },
+        teams: [{ id: 't1' }],
+        company: { id: 'c1' },
+      }),
     }),
     'POST /api/sessions/s2/heartbeat': async () => ({ status: 404, json: async () => ({}) }),
   });
   const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'test-key', fetchImpl: f });
-  assert.deepEqual(await api.heartbeat('s1'), { status: 'ok', context: null });
+  assert.deepEqual(await api.heartbeat('s1'), {
+    status: 'ok',
+    context: { entitled: true, teams: [{ id: 't1' }], company: { id: 'c1' } },
+  });
   assert.deepEqual(await api.heartbeat('s2'), { status: 'expired', context: null });
+});
+
+test('200 with non-JSON body is an error', async () => {
+  const f = mockFetch({
+    'POST /api/sessions/s1/heartbeat': async () => ({
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <');
+      },
+    }),
+  });
+  const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl: f });
+  assert.deepEqual(await api.heartbeat('s1'), { status: 'error', context: null });
+});
+
+test('200 without an entitlement object is an error', async () => {
+  const f = mockFetch({
+    'POST /api/sessions/s1/heartbeat': async () => ({
+      status: 200,
+      json: async () => ({ ok: true }),
+    }),
+  });
+  const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl: f });
+  assert.deepEqual(await api.heartbeat('s1'), { status: 'error', context: null });
 });
 
 test("heartbeat returns 'unreachable' on network error", async () => {

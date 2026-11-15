@@ -1,8 +1,8 @@
 // lib/hub-api.js
-// A hub that predates heartbeat context answers a bare { ok: true }; that yields null.
+// Null unless the body is JSON carrying an entitlement object; callers treat null as an error.
 async function readHeartbeatContext(res) {
   const body = await res.json().catch(() => null);
-  if (!body || !body.entitlement) return null;
+  if (!body || typeof body.entitlement !== 'object' || body.entitlement === null) return null;
   return {
     entitled: body.entitlement.entitled === true,
     teams: Array.isArray(body.teams) ? body.teams : [],
@@ -31,7 +31,10 @@ function createHubApi({ baseUrl, apiKey, appName, fetchImpl = globalThis.fetch }
           method: 'POST',
           headers,
         });
-        if (res.status === 200) return { status: 'ok', context: await readHeartbeatContext(res) };
+        if (res.status === 200) {
+          const context = await readHeartbeatContext(res);
+          return context ? { status: 'ok', context } : { status: 'error', context: null };
+        }
         if (res.status === 404) return { status: 'expired', context: null };
         return { status: 'error', context: null };
       } catch {

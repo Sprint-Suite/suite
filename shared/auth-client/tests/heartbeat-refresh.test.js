@@ -80,17 +80,23 @@ test('requireAuth applies a revoked company on heartbeat', async (t) => {
   assert.equal(row.last_validated_at, Date.now());
 });
 
-test("an old hub's bare ok keeps the stored context", async (t) => {
-  const client = buildClient(t, async () => ({ status: 'ok', context: null }));
+test("an old hub's bare ok is an error: context unchanged, not re-validated", async (t) => {
+  const f = async () => ({ status: 200, json: async () => ({ ok: true }) });
+  const client = buildClient(t, null);
+  client._ctx.hubApi = createHubApi({
+    baseUrl: 'https://hub.test',
+    apiKey: 'k',
+    appName: 'raid',
+    fetchImpl: f,
+  });
   advance(t, 61_000);
-  const { req } = await runRequireAuth(client);
+  const { req, nextCalled } = await runRequireAuth(client);
+  assert.equal(nextCalled, true);
   assert.deepEqual(req.user.company, { id: 'c1' });
-  assert.equal(req.user.entitled, true);
   const row = client._ctx.store.get('a1');
   assert.deepEqual(row.company, { id: 'c1' });
   assert.equal(row.entitled, true);
-  assert.equal(row.teams.length, 1);
-  assert.equal(row.last_validated_at, Date.now());
+  assert.equal(row.last_validated_at, T0);
 });
 
 test('unreachable hub leaves context untouched within grace', async (t) => {
@@ -157,10 +163,4 @@ test('hubApi.heartbeat maps a 200 body with entitlement to context', async () =>
     status: 'ok',
     context: { entitled: true, teams: [], company: { id: 'c1', name: 'C' } },
   });
-});
-
-test('hubApi.heartbeat gives a null context for a bare ok body', async () => {
-  const fetchImpl = async () => ({ status: 200, json: async () => ({ ok: true }) });
-  const api = createHubApi({ baseUrl: 'https://hub.test', apiKey: 'k', fetchImpl });
-  assert.deepEqual(await api.heartbeat('s1'), { status: 'ok', context: null });
 });

@@ -144,3 +144,16 @@ test('state param without any cookie is rejected', async () => {
   assertRejected(res);
   assert.equal(counter.exchanges, 0);
 });
+
+test('missing token clears the state cookie', async () => {
+  const { app, counter } = build();
+  const s = newState();
+  const res = await request(app)
+    .get(`/auth/launch?state=${s}`)
+    .set('Host', 'app.test')
+    .set('Cookie', `${STATE_COOKIE}=${s}`);
+  assert.equal(res.status, 400);
+  assert.equal(res.text, 'Missing launch token');
+  assert.equal(counter.exchanges, 0);
+  assertStateCleared(res);
+});

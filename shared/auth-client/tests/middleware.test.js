@@ -35,7 +35,9 @@ function buildCtx({ heartbeatResult = 'ok' } = {}) {
   const hubApi = {
     async heartbeat() {
       heartbeatCalls++;
-      return { status: heartbeatResult, context: null };
+      const context =
+        heartbeatResult === 'ok' ? { entitled: true, teams: [], company: null } : null;
+      return { status: heartbeatResult, context };
     },
     async exchange() {
       return {};
@@ -135,7 +137,12 @@ test('requireAuth attaches entitled+teams from the session to req.user', async (
   const store = createSessionsStore(':memory:');
   const requireAuth = createRequireAuth({
     store,
-    hubApi: { heartbeat: async () => ({ status: 'ok', context: null }) },
+    hubApi: {
+      heartbeat: async () => ({
+        status: 'ok',
+        context: { entitled: true, teams: [], company: null },
+      }),
+    },
     cookieName: 'poker_session',
     cacheTtlMs: 60_000,
     graceMs: 300_000,
@@ -163,7 +170,12 @@ test('requireAuth attaches company from the session to req.user', async () => {
   const store = createSessionsStore(':memory:');
   const requireAuth = createRequireAuth({
     store,
-    hubApi: { heartbeat: async () => ({ status: 'ok', context: null }) },
+    hubApi: {
+      heartbeat: async () => ({
+        status: 'ok',
+        context: { entitled: true, teams: [], company: null },
+      }),
+    },
     cookieName: 'poker_session',
     cacheTtlMs: 60_000,
     graceMs: 300_000,
