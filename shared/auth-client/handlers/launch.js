@@ -17,7 +17,15 @@ function rejectLaunch(res) {
   res.status(400).type('text/plain').send(LAUNCH_FAILED);
 }
 
-function restartViaHub(ctx, req, res) {
+// Redeems the token so it cannot be replayed; the result is discarded, never a session.
+async function consumeToken(ctx, token) {
+  try {
+    await ctx.hubApi.exchange(token);
+  } catch {}
+}
+
+async function restartViaHub(ctx, req, res, token) {
+  await consumeToken(ctx, token);
   const state = newState();
   setStateCookie(res, { cookieName: ctx.cookieName, value: state });
   const returnTo = req.query.return_to;
@@ -27,11 +35,11 @@ function restartViaHub(ctx, req, res) {
 
 // Returns true when the request carries a state matching this browser's cookie.
 // Otherwise it has already answered: a 400, or a restart through the hub.
-function checkLaunchState(ctx, req, res) {
+async function checkLaunchState(ctx, req, res, token) {
   const cookieState = parseCookies(req.headers.cookie)[stateCookieName(ctx.cookieName)];
   const queryState = req.query.state;
   if (queryState === undefined && cookieState === undefined) {
-    restartViaHub(ctx, req, res);
+    await restartViaHub(ctx, req, res, token);
     return false;
   }
   clearStateCookie(res, { cookieName: ctx.cookieName });
@@ -61,7 +69,7 @@ function createLaunchHandler(ctx) {
       clearStateCookie(res, { cookieName: ctx.cookieName });
       return res.status(400).send('Missing launch token');
     }
-    if (!checkLaunchState(ctx, req, res)) return;
+    if (!(await checkLaunchState(ctx, req, res, token))) return;
     let info;
     try {
       info = await ctx.hubApi.exchange(token);

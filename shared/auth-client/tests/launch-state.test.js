@@ -10,7 +10,7 @@ const COPY =
   'Sign-in could not be completed. Please return to the Sprint Suite dashboard and try again.';
 const STATE_COOKIE = '__Host-raid_session_state';
 
-function build() {
+function build({ exchange } = {}) {
   const client = createAuthClient({
     appName: 'raid',
     hubBaseUrl: 'https://hub',
@@ -19,16 +19,24 @@ function build() {
     cookieDomain: 'example.test',
     dbPath: ':memory:',
   });
-  const counter = { exchanges: 0 };
+  const counter = { exchanges: 0, tokens: [] };
   client._ctx.hubApi = {
-    exchange: async () => {
+    exchange: async (token) => {
       counter.exchanges += 1;
+      counter.tokens.push(token);
+      if (exchange) return exchange(token);
       return { user: { id: 'u1' }, central_session_id: 'c1' };
     },
   };
+  const sessionsCreated = [];
+  const realCreate = client._ctx.store.create;
+  client._ctx.store.create = (row) => {
+    sessionsCreated.push(row);
+    return realCreate(row);
+  };
   const app = express();
   app.get('/auth/launch', client.handleLaunch);
-  return { app, counter };
+  return { app, counter, sessionsCreated };
 }
 
 function cookies(res) {
@@ -67,12 +75,39 @@ test('statesMatch accepts only equal 64-hex strings', () => {
   assert.equal(statesMatch([s], [s]), false);
 });
 
-test('stateless launch restarts via the hub without exchanging', async () => {
-  const { app, counter } = build();
+function assertRestart(res) {
+  assert.equal(res.status, 302);
+  assert.match(res.headers.location, /^https:\/\/hub\/launch\/raid\?state=[a-f0-9]{64}$/);
+  assert.ok(cookies(res).some((c) => c.startsWith(`${STATE_COOKIE}=`)));
+  assert.ok(!cookies(res).some((c) => c.startsWith('raid_session=')), 'session cookie set');
+}
+
+test('stateless launch consumes the token without signing in', async () => {
+  const { app, counter, sessionsCreated } = build();
+  const res = await request(app).get('/auth/launch?token=first-hop').set('Host', 'app.test');
+  assertRestart(res);
+  assert.equal(counter.exchanges, 1);
+  assert.deepEqual(counter.tokens, ['first-hop']);
+  assert.equal(sessionsCreated.length, 0);
+});
+
+test('stateless launch restarts even if consuming fails', async () => {
+  const { app, counter, sessionsCreated } = build({
+    exchange: async () => {
+      throw new Error('exchange_failed:400');
+    },
+  });
+  const res = await request(app).get('/auth/launch?token=t').set('Host', 'app.test');
+  assertRestart(res);
+  assert.equal(counter.exchanges, 1);
+  assert.equal(sessionsCreated.length, 0);
+});
+
+test('stateless launch restarts via the hub with a fresh state cookie', async () => {
+  const { app } = build();
   const res = await request(app).get('/auth/launch?token=t').set('Host', 'app.test');
   assert.equal(res.status, 302);
   assert.match(res.headers.location, /^https:\/\/hub\/launch\/raid\?state=[a-f0-9]{64}$/);
-  assert.equal(counter.exchanges, 0);
   const set = cookies(res).find((c) => c.startsWith(`${STATE_COOKIE}=`));
   assert.ok(set, 'state cookie not set');
   for (const attr of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=120']) {
@@ -130,10 +165,11 @@ test('stateless launch with a stale state cookie fails once', async () => {
     .set('Host', 'app.test')
     .set('Cookie', `${STATE_COOKIE}=${newState()}`);
   assertRejected(first);
+  assert.equal(counter.exchanges, 0);
   const second = await request(app).get('/auth/launch?token=t').set('Host', 'app.test');
   assert.equal(second.status, 302);
   assert.match(second.headers.location, /^https:\/\/hub\/launch\/raid\?state=/);
-  assert.equal(counter.exchanges, 0);
+  assert.equal(counter.exchanges, 1);
 });
 
 test('state param without any cookie is rejected', async () => {
