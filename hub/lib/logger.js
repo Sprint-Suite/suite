@@ -34,15 +34,30 @@ function queryKeyName(key) {
 // every other param byte-for-byte, and any #fragment. Uses targeted
 // replacement (not a URLSearchParams round-trip) so the sentinel stays
 // readable as "[redacted]" and nothing else is re-encoded.
+// A return_to value is itself a URL; mask what it carries and re-encode only if something changed.
+function maskReturnTo(match, key, value) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return match;
+  }
+  const masked = safeUrl(decoded);
+  if (masked === decoded) return match;
+  return `${key}=${encodeURIComponent(masked).replaceAll('%5Bredacted%5D', '[redacted]')}`;
+}
+
 export function safeUrl(url) {
   if (typeof url !== 'string') return url;
   const q = url.indexOf('?');
   if (q === -1) return safePath(url);
   const path = safePath(url.slice(0, q));
   const query = url.slice(q + 1);
-  const masked = query.replace(/([^&=#?]+)=([^&#]*)/g, (match, key, _val) =>
-    SENSITIVE_QUERY.has(queryKeyName(key)) ? `${key}=[redacted]` : match,
-  );
+  const masked = query.replace(/([^&=#?]+)=([^&#]*)/g, (match, key, value) => {
+    const name = queryKeyName(key);
+    if (SENSITIVE_QUERY.has(name)) return `${key}=[redacted]`;
+    return name === 'return_to' ? maskReturnTo(match, key, value) : match;
+  });
   return `${path}?${masked}`;
 }
 
