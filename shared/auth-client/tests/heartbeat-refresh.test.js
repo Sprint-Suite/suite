@@ -201,6 +201,27 @@ test('an older heartbeat response cannot overwrite a newer one', async (t) => {
   assert.equal(row.last_validated_at, T0 + 61_001);
 });
 
+test('overlapping heartbeats completing in order keep the newer result', async (t) => {
+  const { heartbeat, pending } = deferredHeartbeats();
+  const client = buildClient(t, heartbeat);
+  advance(t, 61_000);
+  const older = client.verifySession(COOKIE);
+  advance(t, 1);
+  const newer = client.verifySession(COOKIE);
+  advance(t, 1);
+  pending[0](ENTITLED);
+  await older;
+  advance(t, 1);
+  pending[1](REVOKED);
+  const result = await newer;
+  assert.equal(result.entitled, false);
+  assert.equal(result.company, null);
+  const row = client._ctx.store.get('a1');
+  assert.equal(row.entitled, false);
+  assert.equal(row.company, null);
+  assert.equal(row.last_validated_at, T0 + 61_001);
+});
+
 test('heartbeat fetch has a timeout', async (t) => {
   const requested = [];
   t.mock.method(AbortSignal, 'timeout', (ms) => {
