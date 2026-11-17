@@ -10,6 +10,13 @@ import { OPEN_APPS } from './apps.js';
 
 const PRINCIPAL_TYPES = new Set(['company', 'team', 'user']);
 
+// Apps granted per member rather than per company. A company owner holds every one
+// of them on these terms without a grant row; members get them from the console.
+export const MEMBER_APPS = {
+  signal: { quotaLimit: null, quotaPeriod: null },
+  raid: { quotaLimit: 25, quotaPeriod: 'month' },
+};
+
 export function periodKey(period, t) {
   const d = new Date(t);
   const y = d.getUTCFullYear();
@@ -74,9 +81,28 @@ function usageCount(db, e, pk) {
   return row ? row.count : 0;
 }
 
+function isOwner(db, userId) {
+  return !!db.prepare("SELECT 1 FROM company_members WHERE user_id=? AND role='owner'").get(userId);
+}
+
+// An owner's access as a user-principal row, so it shares the user's usage bucket
+// with any explicit grant and survives role changes without losing the count.
+function derivedOwnerGrant(db, userId, app) {
+  if (!Object.hasOwn(MEMBER_APPS, app) || !isOwner(db, userId)) return null;
+  const terms = MEMBER_APPS[app];
+  return {
+    app,
+    principal_type: 'user',
+    principal_id: userId,
+    quota_limit: terms.quotaLimit,
+    quota_period: terms.quotaPeriod,
+  };
+}
+
 // Returns the chosen entitlement row + computed remaining (null when unlimited), or null when none.
 function select(db, userId, app, t) {
-  const matches = [];
+  const derived = derivedOwnerGrant(db, userId, app);
+  const matches = derived ? [derived] : [];
   for (const p of principalsForUser(db, userId)) {
     const e = db
       .prepare(

@@ -5,6 +5,7 @@ import request from 'supertest';
 import { buildTestApp, post } from './helpers.js';
 import { now, randomToken } from '../lib/tokens.js';
 import { createAccessRequests } from '../lib/access-requests.js';
+import { createEntitlements } from '../lib/entitlements.js';
 
 async function setup({ isAdmin = true } = {}) {
   const { app, db } = await buildTestApp();
@@ -72,15 +73,9 @@ test('approve provisions and emails the CR', async () => {
     ['poker', 'retro'],
   );
   const user = db.prepare("SELECT id FROM users WHERE email='james@ibm.com'").get();
-  const userEnts = db
-    .prepare(
-      "SELECT app FROM app_entitlements WHERE principal_type='user' AND principal_id=? ORDER BY app",
-    )
-    .all(user.id);
-  assert.deepEqual(
-    userEnts.map((e) => e.app),
-    ['raid', 'signal'],
-  );
+  const ent = createEntitlements(db);
+  assert.equal(ent.resolveEntitlement(user.id, 'signal').entitled, true);
+  assert.equal(ent.resolveEntitlement(user.id, 'raid').quota.limit, 25);
   assert.equal(sent.length, 1);
   assert.match(sent[0].url, /auth\/magic\?token=/);
   assert.equal(sent[0].to, 'james@ibm.com');

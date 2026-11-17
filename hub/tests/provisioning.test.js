@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTestApp } from './helpers.js';
 import { createAccessRequests } from '../lib/access-requests.js';
+import { createEntitlements } from '../lib/entitlements.js';
 import { createProvisioner, slugify } from '../lib/provisioning.js';
 
 test('slugify produces clean kebab slugs', () => {
@@ -21,7 +22,7 @@ async function pendingRequest(db, over = {}) {
   });
 }
 
-test('approve provisions company + owner + company poker/retro + owner signal/raid + invite token', async () => {
+test('approve provisions company + owner + company poker/retro + invite token; owner holds signal/raid', async () => {
   const { db } = await buildTestApp();
   db.prepare('INSERT INTO users (id,email,created_at) VALUES (?,?,?)').run(
     'op1',
@@ -52,19 +53,12 @@ test('approve provisions company + owner + company poker/retro + owner signal/ra
     compEnts.map((e) => e.app),
     ['poker', 'retro'],
   );
-  // Signal + RAID at USER level, granted to the new owner
-  const userEnts = db
-    .prepare(
-      "SELECT app, quota_limit, quota_period FROM app_entitlements WHERE principal_type='user' AND principal_id=? AND status='active' ORDER BY app",
-    )
-    .all(res.user.id);
-  assert.deepEqual(
-    userEnts.map((e) => e.app),
-    ['raid', 'signal'],
-  );
-  const raid = userEnts.find((e) => e.app === 'raid');
-  assert.equal(raid.quota_limit, 25);
-  assert.equal(raid.quota_period, 'month');
+  // Signal + RAID come from the owner role, not from grant rows
+  const ent = createEntitlements(db);
+  assert.equal(ent.resolveEntitlement(res.user.id, 'signal').entitled, true);
+  const raid = ent.resolveEntitlement(res.user.id, 'raid').quota;
+  assert.equal(raid.limit, 25);
+  assert.equal(raid.period, 'month');
 
   const tok = db.prepare('SELECT * FROM magic_link_tokens WHERE email = ?').get('james@ibm.com');
   assert.ok(tok, 'an invite token row exists');

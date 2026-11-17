@@ -1,5 +1,6 @@
 // lib/org.js
 import { randomId, now } from './tokens.js';
+import { MEMBER_APPS } from './entitlements.js';
 
 const COMPANY_ROLES = new Set(['owner', 'member']);
 const TEAM_ROLES = new Set(['lead', 'member']);
@@ -85,7 +86,19 @@ export function createOrg(db) {
       userId,
       companyId,
     );
+    suspendMemberAppsIfCompanyless(userId);
   });
+
+  // Per-member grants carry no company scope, so they can only be withdrawn once the
+  // user belongs to no company at all. Removal from A while still in B keeps them.
+  function suspendMemberAppsIfCompanyless(userId) {
+    if (db.prepare('SELECT 1 FROM company_members WHERE user_id=?').get(userId)) return;
+    const apps = Object.keys(MEMBER_APPS);
+    db.prepare(
+      `UPDATE app_entitlements SET status='suspended'
+       WHERE principal_type='user' AND principal_id=? AND app IN (${apps.map(() => '?').join(',')})`,
+    ).run(userId, ...apps);
+  }
 
   function createTeam({ companyId, name }) {
     if (!getCompany(companyId)) throw new Error('company_not_found');
