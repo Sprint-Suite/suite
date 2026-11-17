@@ -6,10 +6,10 @@
 // three, so a Sprintplan magic link silently landed on /dashboard. All three now
 // derive from APPS below.
 //
-// 🚨 Not every app enumeration belongs here. lib/provisioning.js, routes/company.js
-// TOGGLABLE_APPS and schemas/request.js APP_KEYS look like more copies but are
-// deliberate policy SUBSETS — what a new company gets by default, what a company
-// admin may toggle per user, and what the /request form offers. Folding them in
+// 🚨 Not every app enumeration belongs here. lib/provisioning.js, lib/entitlements.js
+// MEMBER_APPS and schemas/request.js APP_KEYS look like more copies but are
+// deliberate policy SUBSETS — what a new company gets by default, what is granted
+// per member, and what the /request form offers. Folding them in
 // would silently change behaviour.
 
 export const APPS = [

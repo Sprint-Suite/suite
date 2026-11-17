@@ -3,7 +3,7 @@ import { createRequireSession } from '../middleware/requireSession.js';
 import { createRequireCompanyRole } from '../middleware/requireCompanyRole.js';
 import { createOrg } from '../lib/org.js';
 import { createAuditLogger } from '../lib/audit.js';
-import { createEntitlements } from '../lib/entitlements.js';
+import { createEntitlements, MEMBER_APPS } from '../lib/entitlements.js';
 import { validate } from '../lib/validate.js';
 import {
   inviteMemberSchema,
@@ -11,11 +11,6 @@ import {
   teamNameSchema,
   teamMemberSchema,
 } from '../schemas/company.js';
-
-const TOGGLABLE_APPS = {
-  signal: { quotaLimit: null, quotaPeriod: null },
-  raid: { quotaLimit: 25, quotaPeriod: 'month' },
-};
 
 export function mountCompany(app) {
   const db = app.locals.db;
@@ -271,15 +266,15 @@ export function mountCompany(app) {
     res.redirect('/company/' + req.company.slug);
   });
 
-  // TODO(multi-tenancy): grants/revokes here are user-scoped (principal_id = user),
-  // not company-scoped, and console "On/Off" state derives from resolveEntitlement
-  // (which sees company- and team-level grants too). Correct while Signal/RAID live
-  // only at user level and every user is single-company; revisit if either changes.
+  // TODO(multi-tenancy): these grants are user-scoped with no company provenance, and
+  // a user can belong to several companies. A grant made here therefore follows the
+  // user into every company, and survives removal from this one while they remain a
+  // member elsewhere (lib/org.js only withdraws it once they have no company left).
   app.post('/company/:slug/members/:userId/apps/:app', ...manage, (req, res) => {
     const appName = req.params.app;
     const action = req.body.action;
     const targetId = req.params.userId;
-    const spec = TOGGLABLE_APPS[appName];
+    const spec = MEMBER_APPS[appName];
     if (!spec) {
       return res
         .status(400)

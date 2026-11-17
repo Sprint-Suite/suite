@@ -6,12 +6,6 @@ import { createAccessRequests } from './access-requests.js';
 
 // Apps every approved company gets at the COMPANY level (all members inherit).
 const DEFAULT_COMPANY_APPS = [{ app: 'poker' }, { app: 'retro' }];
-// Specialist apps granted to the first owner (CR) at the USER level. RAID is
-// capped per-member (demo guardrail); members are enabled later in the console.
-const DEFAULT_OWNER_APPS = [
-  { app: 'signal' },
-  { app: 'raid', quotaLimit: 25, quotaPeriod: 'month' },
-];
 
 export function slugify(name) {
   const base = String(name || '')
@@ -66,16 +60,6 @@ export function createProvisioner(db, { inviteTtlMs }) {
         app: a.app,
         principalType: 'company',
         principalId: company.id,
-        quotaLimit: a.quotaLimit ?? null,
-        quotaPeriod: a.quotaPeriod ?? null,
-        grantedBy,
-      });
-    }
-    for (const a of DEFAULT_OWNER_APPS) {
-      ent.grantEntitlement({
-        app: a.app,
-        principalType: 'user',
-        principalId: user.id,
         quotaLimit: a.quotaLimit ?? null,
         quotaPeriod: a.quotaPeriod ?? null,
         grantedBy,

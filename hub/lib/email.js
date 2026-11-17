@@ -19,8 +19,18 @@ export async function renderAccessRequestNotificationEmail({ request, reviewUrl 
   return await eta.renderAsync('emails/access-request-notification', { request, reviewUrl });
 }
 
-export function createEmailSender({ apiKey, from }) {
-  const resend = new Resend(apiKey);
+// Resend returns API and network failures as { error } rather than throwing, so
+// unwrap them into a rejection that callers' catch blocks can see and log.
+async function deliver(client, message) {
+  const result = await client.emails.send(message);
+  if (result?.error) {
+    throw new Error(`email send failed: ${result.error.message || result.error.name}`);
+  }
+  return result;
+}
+
+export function createEmailSender({ apiKey, from, client = new Resend(apiKey) }) {
+  const resend = { emails: { send: (message) => deliver(client, message) } };
   return {
     async sendMagicLink({ to, url }) {
       const html = await renderMagicLinkEmail({ url });
