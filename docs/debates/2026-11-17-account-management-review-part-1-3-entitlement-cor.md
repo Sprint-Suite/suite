@@ -64,4 +64,3 @@ Owner derivation belongs in select() (hub/lib/entitlements.js:78), shared by res
 **Agreed solution, in ChatGPT's words:**
 
 Use one shared Signal/RAID policy to derive owner entitlement candidates in select(): Signal unlimited and RAID 25/month, keyed to the user’s existing usage bucket. Stop provisioning founder grant rows. Preserve explicit grants across role changes. On company removal, transactionally suspend user-level Signal/RAID grants only after the user loses their final company membership; retain usage counters. Document the unresolved cross-company grant provenance limitation and add regression tests for removal, demotion, quota isolation, exhaustion, and counter continuity. Remove unsupported suspendCompany functionality and its test only after confirming production contains no suspended companies; otherwise defer that removal pending David’s decision.
-

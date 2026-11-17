@@ -19,13 +19,27 @@ export async function renderAccessRequestNotificationEmail({ request, reviewUrl 
   return await eta.renderAsync('emails/access-request-notification', { request, reviewUrl });
 }
 
-// Resend returns API and network failures as { error } rather than throwing, so
-// unwrap them into a rejection that callers' catch blocks can see and log.
-async function deliver(client, message) {
-  const result = await client.emails.send(message);
-  if (result?.error) {
-    throw new Error(`email send failed: ${result.error.message || result.error.name}`);
+// Resend returns API and network failures as { error } rather than throwing. Both
+// that and a thrown failure become one fixed message: provider text can echo the
+// request, and the request carries the magic-link token. Only an allowlisted name
+// and the HTTP status travel with it.
+function safeFailure(detail) {
+  const err = new Error('email send failed');
+  if (typeof detail?.name === 'string' && /^[a-z_]{1,64}$/.test(detail.name)) {
+    err.provider = detail.name;
   }
+  if (Number.isInteger(detail?.statusCode)) err.statusCode = detail.statusCode;
+  return err;
+}
+
+async function deliver(client, message) {
+  let result;
+  try {
+    result = await client.emails.send(message);
+  } catch {
+    throw safeFailure(null);
+  }
+  if (result?.error) throw safeFailure(result.error);
   return result;
 }
 

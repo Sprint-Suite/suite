@@ -31,7 +31,10 @@ test('a returned provider error rejects the send', async () => {
     from: 'x@test',
     client: fakeClient({ data: null, error: { name: 'validation_error', message: 'bad from' } }),
   });
-  await assert.rejects(sender.sendMagicLink({ to: 'a@test', url: 'https://t/x' }), /bad from/);
+  await assert.rejects(sender.sendMagicLink({ to: 'a@test', url: 'https://t/x' }), {
+    message: 'email send failed',
+    provider: 'validation_error',
+  });
   await assert.rejects(sender.sendAccessApproved({ to: 'a@test', url: 'https://t/x' }));
   await assert.rejects(
     sender.sendAccessRequestNotification({

@@ -431,3 +431,15 @@ test('owner of one company cannot toggle a member of another company (404, cross
     .get();
   assert.equal(ent, undefined);
 });
+
+test('POST .../apps/:app refuses inherited object keys such as __proto__', async () => {
+  const { app, db, org, company, sid } = await build({ role: 'owner' });
+  addMember(db, org, company);
+  for (const key of ['__proto__', 'constructor', 'toString']) {
+    const res = await post(app, `/company/acme/members/mem/apps/${key}`)
+      .set('Cookie', cookie(sid))
+      .type('form')
+      .send({ action: 'grant' });
+    assert.equal(res.status, 400, key);
+  }
+});

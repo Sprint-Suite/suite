@@ -88,8 +88,8 @@ function isOwner(db, userId) {
 // An owner's access as a user-principal row, so it shares the user's usage bucket
 // with any explicit grant and survives role changes without losing the count.
 function derivedOwnerGrant(db, userId, app) {
+  if (!Object.hasOwn(MEMBER_APPS, app) || !isOwner(db, userId)) return null;
   const terms = MEMBER_APPS[app];
-  if (!terms || !isOwner(db, userId)) return null;
   return {
     app,
     principal_type: 'user',

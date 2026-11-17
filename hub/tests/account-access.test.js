@@ -194,3 +194,12 @@ test('if revoking grants fails, the removal rolls back rather than failing open'
     .get(m.id, company.id);
   assert.ok(still);
 });
+
+test('owner derivation ignores inherited object keys', () => {
+  const { ent, invite } = setup();
+  const o = invite('o@acme.test', 'owner');
+  for (const key of ['__proto__', 'constructor', 'toString']) {
+    assert.equal(ent.resolveEntitlement(o.id, key).entitled, false, key);
+    assert.equal(ent.consume(o.id, key).ok, false, key);
+  }
+});

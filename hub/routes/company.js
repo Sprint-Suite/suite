@@ -274,7 +274,7 @@ export function mountCompany(app) {
     const appName = req.params.app;
     const action = req.body.action;
     const targetId = req.params.userId;
-    const spec = MEMBER_APPS[appName];
+    const spec = Object.hasOwn(MEMBER_APPS, appName) ? MEMBER_APPS[appName] : null;
     if (!spec) {
       return res
         .status(400)

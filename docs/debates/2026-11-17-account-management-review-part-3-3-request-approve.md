@@ -75,4 +75,3 @@ These are implementation requirements for the revised plan, rather than reasons 
 **Agreed solution, in ChatGPT's words:**
 
 Implement the seven revised items in the proposed order: visible approval-send outcomes and audited resend without reprovisioning; a separate read-only admin company detail page with membership-based company authorization unchanged; explicit new-company approval confirmation; enable auditing and all company memberships in the users table; clearly labelled, server-enforced site-admin creation; informational app-interest helper text; and optional internal rejection notes. Handle Resend error results explicitly, verify authorization and resend invariants, and defer existing-company approval and rejection email.
-

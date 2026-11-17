@@ -71,4 +71,3 @@ The revised design otherwise addresses the identified problems without introduci
 **Agreed solution, in ChatGPT's words:**
 
 Keep single-purpose role and app POST buttons, show role/access state explicitly, retain last-owner protection, and remove redundant owner-only template branches. Keep team membership management on the team page and add a read-only Teams column. Wire a dedicated company/inviter invitation email through app.js, using magic tokens and an owner-only, target-rate-limited resend POST. Report membership and email outcomes separately, including returned provider errors. Label Suite sign-in history “Signed in”/“Never signed in”. Duplicate invitations show “already a member” while preserving the role and sending nothing. Ship the owner-access explanation with the verified Part 1 entitlement change.
-
