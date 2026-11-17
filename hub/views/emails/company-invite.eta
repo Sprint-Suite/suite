@@ -1,0 +1,9 @@
+<!-- views/emails/company-invite.eta -->
+<!doctype html>
+<html><body style="font-family: -apple-system, system-ui, sans-serif; max-width: 480px; margin: 32px auto; color: #222;">
+<h2 style="margin-bottom: 8px;">You've been added to <%= it.companyName %> on Sprint Suite</h2>
+<p><%= it.inviterEmail %> added you to <strong><%= it.companyName %></strong>. Click below to sign in. This link is valid for 7 days and works once.</p>
+<p><a href="<%= it.url %>" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Sign in to Sprint Suite</a></p>
+<p style="color: #666; font-size: 14px;">If the link has expired, go to sprintsuite.uk/login and enter this email address to get a new one.</p>
+<p style="color: #999; font-size: 12px; margin-top: 32px;">Sprint Suite · sprintsuite.uk</p>
+</body></html>
