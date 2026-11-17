@@ -33,6 +33,13 @@ test('a returned provider error rejects the send', async () => {
   });
   await assert.rejects(sender.sendMagicLink({ to: 'a@test', url: 'https://t/x' }), /bad from/);
   await assert.rejects(sender.sendAccessApproved({ to: 'a@test', url: 'https://t/x' }));
+  await assert.rejects(
+    sender.sendAccessRequestNotification({
+      to: 'ops@test',
+      request: { companyName: 'A' },
+      reviewUrl: 'https://t/admin',
+    }),
+  );
 });
 
 test('a successful provider reply resolves with its data', async () => {

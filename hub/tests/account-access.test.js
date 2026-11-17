@@ -140,3 +140,57 @@ test('a removed (non-last) owner loses derived access', () => {
   org.removeCompanyMember({ userId: o.id, companyId: company.id });
   assert.equal(can(o.id, 'signal'), false);
 });
+
+test('owner derivation covers only per-member apps, not poker or retro', () => {
+  const { org, can } = setup();
+  const bare = org.createCompany({ name: 'Bare', slug: 'bare' });
+  const o = org.inviteCompanyMember({ email: 'o@bare.test', companyId: bare.id, role: 'owner' });
+  assert.equal(can(o.user.id, 'signal'), true);
+  assert.equal(can(o.user.id, 'poker'), false);
+  assert.equal(can(o.user.id, 'retro'), false);
+});
+
+test('removal suspends only the removed user’s Signal/RAID rows, and keeps the rows', () => {
+  const { db, org, ent, company, invite, can } = setup();
+  const a = invite('a@acme.test', 'member');
+  const b = invite('b@acme.test', 'member');
+  for (const [u, app] of [
+    [a, 'signal'],
+    [a, 'retro'],
+    [b, 'signal'],
+  ]) {
+    ent.grantEntitlement({ app, principalType: 'user', principalId: u.id });
+  }
+  org.removeCompanyMember({ userId: a.id, companyId: company.id });
+  assert.equal(can(a.id, 'retro'), true);
+  assert.equal(can(b.id, 'signal'), true);
+  const row = db.prepare(
+    "SELECT status FROM app_entitlements WHERE principal_type='user' AND principal_id=? AND app='signal'",
+  );
+  assert.equal(row.get(a.id).status, 'suspended');
+});
+
+test('removal takes the user off the company’s teams, so team grants stop applying', () => {
+  const { org, ent, company, invite, can } = setup();
+  const m = invite('m@acme.test', 'member');
+  const team = org.createTeam({ companyId: company.id, name: 'Blue' });
+  org.addTeamMember({ userId: m.id, teamId: team.id, role: 'member' });
+  ent.grantEntitlement({ app: 'signal', principalType: 'team', principalId: team.id });
+  assert.equal(can(m.id, 'signal'), true);
+  org.removeCompanyMember({ userId: m.id, companyId: company.id });
+  assert.equal(can(m.id, 'signal'), false);
+});
+
+test('if revoking grants fails, the removal rolls back rather than failing open', () => {
+  const { db, org, ent, company, invite } = setup();
+  const m = invite('m@acme.test', 'member');
+  ent.grantEntitlement({ app: 'signal', principalType: 'user', principalId: m.id });
+  db.exec(
+    "CREATE TRIGGER no_suspend BEFORE UPDATE ON app_entitlements BEGIN SELECT RAISE(ABORT, 'boom'); END",
+  );
+  assert.throws(() => org.removeCompanyMember({ userId: m.id, companyId: company.id }), /boom/);
+  const still = db
+    .prepare('SELECT 1 FROM company_members WHERE user_id=? AND company_id=?')
+    .get(m.id, company.id);
+  assert.ok(still);
+});
