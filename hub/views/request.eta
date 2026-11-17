@@ -15,7 +15,7 @@
       <option value="200+" <%= it.values.team_size === '200+' ? 'selected' : '' %>>200+</option>
     </select>
   </div>
-  <div class="field"><label class="label">Apps you're interested in</label>
+  <div class="field"><label class="label">Apps you're interested in <span class="helper">(helps us understand your needs; it doesn't change which apps you start with)</span></label>
     <div class="checks">
       <label class="check"><input type="checkbox" name="apps" value="poker" <%= (it.values.apps || []).includes('poker') ? 'checked' : '' %>> Sprintpoker</label>
       <label class="check"><input type="checkbox" name="apps" value="retro" <%= (it.values.apps || []).includes('retro') ? 'checked' : '' %>> Sprintretro</label>

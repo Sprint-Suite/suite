@@ -3,34 +3,30 @@ import { createRequireSession } from '../middleware/requireSession.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { randomId, now } from '../lib/tokens.js';
 import { createAuditLogger } from '../lib/audit.js';
-import { createOrg } from '../lib/org.js';
-import { createEntitlements } from '../lib/entitlements.js';
-import { createAccessRequests } from '../lib/access-requests.js';
-import { createProvisioner } from '../lib/provisioning.js';
 import { deleteCentralSession, deleteCentralSessionsForUser } from '../lib/sessions.js';
 import { deleteUser } from '../lib/users.js';
-import logger from '../lib/logger.js';
 import { validate } from '../lib/validate.js';
-import { createUserSchema, rejectRequestSchema } from '../schemas/admin.js';
+import { createUserSchema } from '../schemas/admin.js';
+import { mountAdminCompanies } from './admin-companies.js';
 
-function safeAppsLabel(json) {
-  try {
-    const arr = JSON.parse(json);
-    return Array.isArray(arr) && arr.length ? arr.join(', ') : null;
-  } catch {
-    return null;
-  }
+// "IBM (owner), Zeta (member)" per user id, for the users table.
+function membershipsByUser(db) {
+  const rows = db
+    .prepare(
+      `SELECT cm.user_id, c.name, cm.role FROM company_members cm
+       JOIN companies c ON c.id = cm.company_id ORDER BY c.name`,
+    )
+    .all();
+  const out = {};
+  for (const r of rows) (out[r.user_id] ||= []).push(`${r.name} (${r.role})`);
+  return out;
 }
 
 export function mountAdmin(app, { emailSender } = {}) {
   const db = app.locals.db;
   const requireSession = createRequireSession(db);
   const audit = createAuditLogger(db);
-  const config = app.locals.config;
-  const org = createOrg(db);
-  const ent = createEntitlements(db);
-  const reqs = createAccessRequests(db);
-  const provisioner = createProvisioner(db, { inviteTtlMs: config.inviteTtlMs });
+  const admin = [requireSession, requireAdmin];
 
   app.get('/admin', requireSession, requireAdmin, (req, res) => {
     const users = db
@@ -42,7 +38,8 @@ export function mountAdmin(app, { emailSender } = {}) {
     `,
       )
       .all();
-    res.render('admin/users', { user: req.user, users });
+    const companies = membershipsByUser(db);
+    res.render('admin/users', { user: req.user, users, companies });
   });
 
   app.post(
@@ -54,16 +51,17 @@ export function mountAdmin(app, { emailSender } = {}) {
         res.status(400).render('error', { title: 'Bad request', message: 'Invalid email.' }),
     }),
     (req, res) => {
-      const { email, display_name: displayName, is_admin: isAdmin } = req.body;
+      // Site admins only: ordinary users join through a company invite, which emails them.
+      const { email, display_name: displayName } = req.body;
       try {
         const id = randomId();
         db.prepare(
           'INSERT INTO users (id,email,display_name,is_admin,created_at) VALUES (?,?,?,?,?)',
-        ).run(id, email, displayName, isAdmin, now());
+        ).run(id, email, displayName, 1, now());
         audit.log({
           userId: req.user.id,
           eventType: 'user_created',
-          metadata: { email },
+          metadata: { email, is_admin: true },
           ip: req.ip,
         });
       } catch (e) {
@@ -94,6 +92,12 @@ export function mountAdmin(app, { emailSender } = {}) {
 
   app.post('/admin/users/:id/enable', requireSession, requireAdmin, (req, res) => {
     db.prepare('UPDATE users SET disabled_at = NULL WHERE id = ?').run(req.params.id);
+    audit.log({
+      userId: req.user.id,
+      eventType: 'user_enabled',
+      metadata: { target: req.params.id },
+      ip: req.ip,
+    });
     res.redirect('/admin');
   });
 
@@ -150,76 +154,5 @@ export function mountAdmin(app, { emailSender } = {}) {
     res.render('admin/audit', { user: req.user, events });
   });
 
-  app.get('/admin/companies', requireSession, requireAdmin, (req, res) => {
-    const companies = org.listAllCompanies();
-    const appsByCompany = {};
-    for (const c of companies) appsByCompany[c.id] = ent.listCompanyApps(c.id);
-    const pending = reqs.listByStatus('pending');
-    // Flag likely-duplicate requests so the operator doesn't provision a second
-    // company for the same person/name: same email across pending requests, or a
-    // requested company name that already matches an existing company.
-    const norm = (s) => (s || '').trim().toLowerCase();
-    const emailCounts = new Map();
-    for (const r of pending) {
-      const k = norm(r.email);
-      if (k) emailCounts.set(k, (emailCounts.get(k) || 0) + 1);
-    }
-    const existingNames = new Set(companies.map((c) => norm(c.name)));
-    const requests = pending.map((r) => ({
-      ...r,
-      appsLabel: r.apps_interest ? safeAppsLabel(r.apps_interest) : null,
-      dupeEmail: !!norm(r.email) && emailCounts.get(norm(r.email)) > 1,
-      existingCompany: !!norm(r.company_name) && existingNames.has(norm(r.company_name)),
-    }));
-    res.render('admin/companies', { user: req.user, companies, appsByCompany, requests });
-  });
-
-  app.post('/admin/requests/:id/approve', requireSession, requireAdmin, async (req, res) => {
-    const result = provisioner.approve({ requestId: req.params.id, grantedBy: req.user.id });
-    if (!result.ok) {
-      const message =
-        result.reason === 'not_pending'
-          ? 'That request has already been handled.'
-          : 'Request not found.';
-      return res.status(400).render('error', { title: "Can't approve", message });
-    }
-    audit.log({
-      userId: req.user.id,
-      eventType: 'access_request_approved',
-      metadata: { company: result.company.slug, email: result.user.email },
-      ip: req.ip,
-    });
-    const url = `${config.baseUrl}/auth/magic?token=${result.token}`;
-    try {
-      if (emailSender) await emailSender.sendAccessApproved({ to: result.user.email, url });
-    } catch (err) {
-      (req.log || logger).error({ err }, 'access-approved email send failed');
-    }
-    res.redirect('/admin/companies');
-  });
-
-  app.post(
-    '/admin/requests/:id/reject',
-    requireSession,
-    requireAdmin,
-    validate(rejectRequestSchema),
-    (req, res) => {
-      const note = req.body.review_note;
-      const r = reqs.getRequest(req.params.id);
-      if (!r || r.status !== 'pending') {
-        return res.status(400).render('error', {
-          title: "Can't reject",
-          message: 'That request has already been handled.',
-        });
-      }
-      reqs.markReviewed({ id: req.params.id, status: 'rejected', reviewedBy: req.user.id, note });
-      audit.log({
-        userId: req.user.id,
-        eventType: 'access_request_rejected',
-        metadata: { email: r.email },
-        ip: req.ip,
-      });
-      res.redirect('/admin/companies');
-    },
-  );
+  mountAdminCompanies(app, { admin, emailSender });
 }

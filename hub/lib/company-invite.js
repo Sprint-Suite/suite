@@ -1,13 +1,11 @@
 // lib/company-invite.js — add someone to a company and email them a sign-in link.
-import { randomToken, now } from './tokens.js';
 import { createOrg } from './org.js';
 import { createLimiter } from './rate-limit.js';
+import { mintMagicToken } from './magic-tokens.js';
+import { trySend } from './email.js';
 
 export function createCompanyInviter(db, { emailSender, baseUrl, inviteTtlMs }) {
   const org = createOrg(db);
-  const insertToken = db.prepare(
-    'INSERT INTO magic_link_tokens (token,email,return_to,created_at,expires_at) VALUES (?,?,?,?,?)',
-  );
 
   // One allowance per recipient address, shared by invite and resend, so that
   // removing and re-inviting someone cannot send them more email.
@@ -16,10 +14,7 @@ export function createCompanyInviter(db, { emailSender, baseUrl, inviteTtlMs }) 
   // A fresh token, or null when the recipient's allowance is spent.
   function mintToken(email) {
     if (!recipientLimiter.check(email)) return null;
-    const token = randomToken();
-    const t = now();
-    insertToken.run(token, email, null, t, t + inviteTtlMs);
-    return token;
+    return mintMagicToken(db, { email, ttlMs: inviteTtlMs });
   }
 
   // Membership and token commit together; the email goes after, so a failed send
@@ -33,16 +28,11 @@ export function createCompanyInviter(db, { emailSender, baseUrl, inviteTtlMs }) 
   });
 
   // Resolves true when the provider accepted the email. Never throws.
-  async function send({ to, token, companyName, inviterEmail, log }) {
-    if (!emailSender) return false;
-    try {
-      const url = `${baseUrl}/auth/magic?token=${token}`;
-      await emailSender.sendCompanyInvite({ to, url, companyName, inviterEmail });
-      return true;
-    } catch (err) {
-      log.error({ err }, 'company invite email send failed');
-      return false;
-    }
+  function send({ to, token, companyName, inviterEmail, log }) {
+    const url = `${baseUrl}/auth/magic?token=${token}`;
+    const fn =
+      emailSender && (() => emailSender.sendCompanyInvite({ to, url, companyName, inviterEmail }));
+    return trySend(log, 'company invite', fn);
   }
 
   return { addMember, mintToken, send };

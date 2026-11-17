@@ -1,5 +1,6 @@
 <%~ include("../partials/header", { title: "Admin · Companies", user: it.user }) %>
 <%~ include("../partials/admin-nav") %>
+<% if (it.notice) { %><div class="notice<%= it.notice.ok ? '' : ' notice-err' %>" role="status"><%= it.notice.text %></div><% } %>
 <div class="card">
 <h2>Pending requests (<%= it.requests.length %>)</h2>
 <% if (it.requests.length === 0) { %><p class="lede">No pending requests.</p><% } else { %>
@@ -13,8 +14,8 @@
 <td><%= r.email %><% if (r.dupeEmail) { %> <span class="pill pill-flag" title="Another pending request uses this email">duplicate email</span><% } %></td>
 <td><%= r.appsLabel || "—" %></td>
 <td><div class="tbacts">
-<form method="POST" action="/admin/requests/<%= r.id %>/approve"><button class="btn btn-pri btn-sm" type="submit">Approve</button></form>
-<form method="POST" action="/admin/requests/<%= r.id %>/reject" data-confirm="Reject this access request?" data-confirm-title="Reject request" data-confirm-ok="Reject"><button class="btn btn-danger btn-sm" type="submit">Reject</button></form>
+<form method="POST" action="/admin/requests/<%= r.id %>/approve" data-confirm="This creates a NEW company &quot;<%= r.company_name %>&quot;, makes <%= r.email %> its owner, grants the default apps and emails them a sign-in link. The duplicate and existing-company flags do not change this." data-confirm-title="Approve request" data-confirm-ok="Approve"><button class="btn btn-pri btn-sm" type="submit">Approve</button></form>
+<form method="POST" action="/admin/requests/<%= r.id %>/reject" class="tbacts" data-confirm="Reject this access request? The requester is not emailed." data-confirm-title="Reject request" data-confirm-ok="Reject"><input class="input is-auto" type="text" name="review_note" placeholder="Internal note (optional)" aria-label="Internal note (optional)"><button class="btn btn-danger btn-sm" type="submit">Reject</button></form>
 </div></td>
 </tr>
 <% } %>
@@ -28,7 +29,7 @@
 <tbody>
 <% for (const c of it.companies) { %>
 <tr>
-<td><a class="lnk" href="/company/<%= c.slug %>"><%= c.name %></a></td>
+<td><a class="lnk" href="/admin/companies/<%= c.slug %>"><%= c.name %></a></td>
 <td class="mono"><%= c.slug %></td>
 <td><span class="pill <%= c.status === 'active' ? 'pill-ok' : 'pill-closed' %>"><%= c.status %></span></td>
 <td><%= c.memberCount %></td>

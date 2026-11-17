@@ -47,6 +47,19 @@ async function deliver(client, message) {
   return result;
 }
 
+// Run one send and report whether the provider accepted it. Never throws: a
+// missing sender or any failure is logged and returns false.
+export async function trySend(log, label, sendFn) {
+  if (!sendFn) return false;
+  try {
+    await sendFn();
+    return true;
+  } catch (err) {
+    log.error({ err }, `${label} email send failed`);
+    return false;
+  }
+}
+
 export function createEmailSender({ apiKey, from, client = new Resend(apiKey) }) {
   const resend = { emails: { send: (message) => deliver(client, message) } };
   return {
