@@ -8,7 +8,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { buildRealApp } from './helpers.js';
+import { buildRealApp, post } from './helpers.js';
+import { createOrg } from '../lib/org.js';
+import { now, randomToken } from '../lib/tokens.js';
 
 /* One row per mount call in app.js. The status is only there to prove the route
    exists and its middleware ran — the behaviour behind each is tested in its own
@@ -104,4 +106,25 @@ test('every state-changing /api route is Bearer-only, keeping the CSRF exemption
     const res = await request(app)[method](probe).type('form');
     assert.equal(res.status, 401, `${method.toUpperCase()} ${path} is not Bearer-only`);
   }
+});
+
+test('the email sender reaches the company console: an invite is emailed', async () => {
+  const sent = [];
+  const { app, db } = await buildRealApp({
+    emailSender: { sendCompanyInvite: async (m) => sent.push(m) },
+  });
+  const org = createOrg(db);
+  const c = org.createCompany({ name: 'Acme', slug: 'acme' });
+  db.prepare('INSERT INTO users (id,email,created_at) VALUES (?,?,?)').run('u1', 'o@b.c', now());
+  org.addCompanyMember({ userId: 'u1', companyId: c.id, role: 'owner' });
+  const sid = randomToken();
+  db.prepare(
+    'INSERT INTO central_sessions (id,user_id,created_at,last_heartbeat_at,expires_at) VALUES (?,?,?,?,?)',
+  ).run(sid, 'u1', now(), now(), now() + 60_000);
+  const res = await post(app, '/company/acme/members')
+    .type('form')
+    .send({ email: 'new@b.c', role: 'member' })
+    .set('Cookie', `hub_session=${sid}`);
+  assert.equal(res.headers.location, '/company/acme?notice=invited');
+  assert.equal(sent.length, 1);
 });

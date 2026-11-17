@@ -5,14 +5,30 @@ import { createOrg } from '../lib/org.js';
 import { createAuditLogger } from '../lib/audit.js';
 import { createEntitlements, MEMBER_APPS } from '../lib/entitlements.js';
 import { validate } from '../lib/validate.js';
-import {
-  inviteMemberSchema,
-  memberRoleSchema,
-  teamNameSchema,
-  teamMemberSchema,
-} from '../schemas/company.js';
+import { memberRoleSchema, teamNameSchema, teamMemberSchema } from '../schemas/company.js';
+import { mountCompanyInvite } from './company-invite.js';
 
-export function mountCompany(app) {
+// Fixed text for ?notice=<key>. Never render the query value itself.
+const NOTICES = {
+  invited: { ok: true, text: 'Added. A sign-in link is on its way to them.' },
+  resent: { ok: true, text: 'A new sign-in link is on its way.' },
+  already_member: { ok: true, text: 'They are already a member. Nothing was changed or sent.' },
+  invite_email_failed: {
+    ok: false,
+    text: 'The member is added, but the sign-in email could not be sent. Try "Resend link" shortly.',
+  },
+  invite_email_throttled: {
+    ok: false,
+    text: 'The member is added, but too many links went to that address in the last hour, so none was sent.',
+  },
+  account_disabled: { ok: false, text: 'That account is disabled, so no sign-in link was sent.' },
+  resend_throttled: {
+    ok: false,
+    text: 'Too many links sent to that person in the last hour. Try again later.',
+  },
+};
+
+export function mountCompany(app, { emailSender } = {}) {
   const db = app.locals.db;
   const requireSession = createRequireSession(db);
   const companyRole = createRequireCompanyRole(db);
@@ -23,12 +39,6 @@ export function mountCompany(app) {
 
   const badReq = (title, message) => (_req, res) =>
     res.status(400).render('error', { title, message });
-
-  function inviteInvalid(req, res, error) {
-    const fields = error.flatten().fieldErrors;
-    const message = fields.email ? 'Invalid email.' : 'Invalid role.';
-    return res.status(400).render('error', { title: 'Bad request', message });
-  }
 
   // Resolve a team that must belong to req.company; render 404 otherwise.
   function loadTeam(req, res) {
@@ -51,7 +61,6 @@ export function mountCompany(app) {
     res.render('company/team', {
       user: req.user,
       company: req.company,
-      companyRole: req.companyRole,
       team,
       teamMembers,
       availableMembers,
@@ -63,35 +72,21 @@ export function mountCompany(app) {
       ...m,
       signalOn: ent.resolveEntitlement(m.userId, 'signal').entitled,
       raidOn: ent.resolveEntitlement(m.userId, 'raid').entitled,
+      teams: org.teamsForUser(m.userId, req.company.id).map((t) => t.name),
     }));
     const teams = org.listTeams(req.company.id);
+    const key = req.query.notice;
+    const notice = typeof key === 'string' && Object.hasOwn(NOTICES, key) ? NOTICES[key] : null;
     res.render('company/console', {
       user: req.user,
       company: req.company,
-      companyRole: req.companyRole,
       members,
       teams,
+      notice,
     });
   });
 
-  app.post(
-    '/company/:slug/members',
-    ...manage,
-    validate(inviteMemberSchema, { onInvalid: inviteInvalid }),
-    (req, res) => {
-      const { email, role } = req.body;
-      const r = org.inviteCompanyMember({ email, companyId: req.company.id, role });
-      if (!r.alreadyMember) {
-        audit.log({
-          userId: req.user.id,
-          eventType: 'company_member_invited',
-          metadata: { company: req.company.slug, email, role },
-          ip: req.ip,
-        });
-      }
-      res.redirect('/company/' + req.company.slug);
-    },
-  );
+  mountCompanyInvite(app, { manage, emailSender });
 
   app.post(
     '/company/:slug/members/:userId/role',

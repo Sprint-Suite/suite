@@ -70,7 +70,7 @@ test('owner can invite a new member; user + membership created', async () => {
     .send({ email: 'New@B.C', role: 'member' })
     .set('Cookie', cookie(sid));
   assert.equal(res.status, 302);
-  assert.equal(res.headers.location, '/company/acme');
+  assert.match(res.headers.location, /^\/company\/acme\?notice=/);
   const u = db.prepare('SELECT * FROM users WHERE email = ?').get('new@b.c');
   assert.ok(u, 'user row created (lowercased)');
   const m = db

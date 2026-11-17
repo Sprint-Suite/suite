@@ -115,7 +115,7 @@ function mountRoutes(app, { emailSender, marketing }) {
   mountApiApps(app);
   mountLogout(app);
   mountAdmin(app, { emailSender });
-  mountCompany(app);
+  mountCompany(app, { emailSender });
   mountRequest(app, { emailSender, marketing });
   mountLegal(app, { marketing });
   mountSitemap(app);

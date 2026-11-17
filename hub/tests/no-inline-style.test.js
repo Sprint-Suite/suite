@@ -99,9 +99,11 @@ const FIXTURES = {
   'company/console': {
     user,
     company,
-    companyRole: 'owner',
-    members: [{ userId: 2, email: 'm@test', role: 'member', signalOn: 1, raidOn: 0 }],
+    members: [
+      { userId: 2, email: 'm@test', role: 'member', signalOn: 1, raidOn: 0, teams: ['Platform'] },
+    ],
     teams: [{ id: 3, name: 'Platform' }],
+    notice: { ok: false, text: 'x' },
   },
   'company/team': {
     user,

@@ -104,11 +104,11 @@ export async function buildTestApp({ env = {}, logger = testLogger } = {}) {
 // WIRING — what answers an unmatched path, what sits last in the stack — needs this
 // one. Keep it single: a second copy of the real wiring is the drift app.test.js's
 // own header warns about.
-export async function buildRealApp() {
+export async function buildRealApp({ emailSender = noopSender } = {}) {
   seedTestEnv({});
   const { default: config } = await import('../config.js?t=' + Date.now());
   const db = openDb(':memory:');
-  const app = createApp({ config, db, logger: testLogger, emailSender: noopSender });
+  const app = createApp({ config, db, logger: testLogger, emailSender });
   return { app, db, config };
 }
 

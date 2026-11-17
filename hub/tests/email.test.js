@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   renderMagicLinkEmail,
   renderAccessApprovedEmail,
+  renderCompanyInviteEmail,
   createEmailSender,
 } from '../lib/email.js';
 
@@ -17,6 +18,18 @@ test('renderAccessApprovedEmail includes the sign-in url', async () => {
   const html = await renderAccessApprovedEmail({ url: 'https://test/auth/magic?token=abc' });
   assert.match(html, /auth\/magic\?token=abc/);
   assert.match(html, /Sprint Suite/);
+});
+
+test('renderCompanyInviteEmail names the company and the inviter, escaped', async () => {
+  const html = await renderCompanyInviteEmail({
+    url: 'https://test/auth/magic?token=abc',
+    companyName: 'Acme <b>',
+    inviterEmail: 'boss@acme.test',
+  });
+  assert.match(html, /auth\/magic\?token=abc/);
+  assert.match(html, /Acme &lt;b&gt;/);
+  assert.match(html, /boss@acme\.test/);
+  assert.doesNotMatch(html, /approved/i);
 });
 
 // Resend reports API and network failures as a returned { error }, not a throw.
@@ -36,6 +49,14 @@ test('a returned provider error rejects the send', async () => {
     provider: 'validation_error',
   });
   await assert.rejects(sender.sendAccessApproved({ to: 'a@test', url: 'https://t/x' }));
+  await assert.rejects(
+    sender.sendCompanyInvite({
+      to: 'a@test',
+      url: 'https://t/x',
+      companyName: 'A',
+      inviterEmail: 'b@test',
+    }),
+  );
   await assert.rejects(
     sender.sendAccessRequestNotification({
       to: 'ops@test',
