@@ -14,9 +14,6 @@ export const createUserSchema = z.object({
       return t === '' || t == null ? null : t;
     }, z.string().nullable())
     .default(null),
-  is_admin: z
-    .preprocess((v) => (v === '1' ? 1 : 0), z.union([z.literal(0), z.literal(1)]))
-    .default(0),
 });
 
 export const rejectRequestSchema = z.object({

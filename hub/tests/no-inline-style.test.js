@@ -69,7 +69,28 @@ const FIXTURES = {
     apps: [{ key: 'signal', name: 'Signal', desc: 'd', href: '/launch/signal', entitled: 1 }],
     manageable: [{ name: 'Acme Ltd', slug: 'acme', role: 'owner' }],
   },
-  'admin/users': { user, users: [{ id: 1, email: 'u@test', session_count: 0 }] },
+  'admin/users': {
+    user,
+    users: [{ id: 1, email: 'u@test', session_count: 0 }],
+    companies: { 1: ['Acme Ltd (owner)'] },
+  },
+  'admin/company': {
+    user,
+    company: { name: 'Acme Ltd', slug: 'acme', status: 'active' },
+    members: [
+      {
+        userId: 2,
+        email: 'm@test',
+        role: 'owner',
+        hasLoggedIn: false,
+        teams: [],
+        apps: ['Signal'],
+      },
+    ],
+    teams: [{ id: 3, name: 'Platform' }],
+    companyApps: ['poker'],
+    notice: { ok: false, text: 'x' },
+  },
   'admin/audit': {
     user,
     events: [
@@ -95,6 +116,7 @@ const FIXTURES = {
       },
     ],
     appsByCompany: { 1: ['signal'] },
+    notice: { ok: true, text: 'x' },
   },
   'company/console': {
     user,

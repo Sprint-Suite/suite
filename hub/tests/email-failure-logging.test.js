@@ -185,6 +185,7 @@ test('approve still redirects and logs when the approval email fails', async () 
   );
   await tick();
   assert.equal(res.status, 302);
-  assert.equal(res.headers.location, '/admin/companies');
+  assert.equal(res.headers.location, '/admin/companies/ibm?notice=approved_email_failed');
+  assert.equal(createAccessRequests(db).getRequest(r.id).status, 'approved');
   assert.ok(cap.records().some((x) => x.msg === 'access-approved email send failed'));
 });

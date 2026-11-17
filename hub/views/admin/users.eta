@@ -1,24 +1,25 @@
 <%~ include("../partials/header", { title: "Admin · Users", user: it.user }) %>
 <%~ include("../partials/admin-nav") %>
 <div class="card">
-<h2>Add user</h2>
+<h2>Add site admin</h2>
+<p class="micro">Creates an administrator of the whole Suite. To add someone to a company, invite them from that company's console, which emails them a sign-in link.</p>
 <form method="POST" action="/admin/users" class="formcol">
 <div class="field"><label class="label">Email</label><input class="input" type="email" name="email" placeholder="email@example.com" required></div>
 <div class="field"><label class="label">Display name <span class="helper">(optional)</span></label><input class="input" type="text" name="display_name"></div>
-<label class="check"><input type="checkbox" name="is_admin" value="1"> Admin</label>
-<p><button class="btn btn-pri" type="submit">Add user</button></p>
+<p><button class="btn btn-pri" type="submit">Add site admin</button></p>
 </form>
 </div>
 <div class="card">
 <h2>Users (<%= it.users.length %>)</h2>
 <div class="table-wrap"><table class="table">
-<thead><tr><th>Email</th><th>Name</th><th>Admin</th><th>Sessions</th><th>Status</th><th></th></tr></thead>
+<thead><tr><th>Email</th><th>Name</th><th>Admin</th><th>Companies</th><th>Sessions</th><th>Status</th><th></th></tr></thead>
 <tbody>
 <% for (const u of it.users) { %>
 <tr>
 <td><%= u.email %></td>
 <td><%= u.display_name || "—" %></td>
 <td><%= u.is_admin ? "✓" : "" %></td>
+<td><%= (it.companies[u.id] || []).join(", ") || "—" %></td>
 <td><%= u.session_count %></td>
 <td><span class="pill <%= u.disabled_at ? 'pill-closed' : 'pill-ok' %>"><%= u.disabled_at ? "disabled" : "active" %></span></td>
 <td><div class="tbacts">

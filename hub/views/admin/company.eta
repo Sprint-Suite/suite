@@ -1,0 +1,33 @@
+<%~ include("../partials/header", { title: "Admin · " + it.company.name, user: it.user }) %>
+<%~ include("../partials/admin-nav") %>
+<% if (it.notice) { %><div class="notice<%= it.notice.ok ? '' : ' notice-err' %>" role="status"><%= it.notice.text %></div><% } %>
+<h1><%= it.company.name %></h1>
+<p class="micro"><span class="mono"><%= it.company.slug %></span> · <%= it.company.status %> · company apps: <%= it.companyApps.join(", ") || "—" %> · read-only: owners manage members from their own console.</p>
+<div class="card">
+<h2>Members (<%= it.members.length %>)</h2>
+<div class="table-wrap"><table class="table">
+<thead><tr><th>Email</th><th>Role</th><th>Apps (across all their companies)</th><th>Teams</th><th>Sign-in</th><th></th></tr></thead>
+<tbody>
+<% for (const m of it.members) { %>
+<tr>
+<td><%= m.email %></td>
+<td><span class="pill pill-ok"><%= m.role === "owner" ? "Owner" : "Member" %></span></td>
+<td><span class="micro"><%= m.apps.join(", ") || "—" %></span></td>
+<td><span class="micro"><%= m.teams.length ? m.teams.join(", ") : "—" %></span></td>
+<td><span class="pill <%= m.hasLoggedIn ? 'pill-ok' : 'pill-closed' %>"><%= m.hasLoggedIn ? "Signed in" : "Never signed in" %></span></td>
+<td>
+<% if (m.role === "owner") { %>
+<form method="POST" action="/admin/companies/<%= it.company.slug %>/owners/<%= m.userId %>/resend" data-confirm="Email a new sign-in link to <%= m.email %>?" data-confirm-title="Resend sign-in link" data-confirm-ok="Send"><button class="btn btn-ghost btn-sm" type="submit">Resend sign-in link</button></form>
+<% } %>
+</td>
+</tr>
+<% } %>
+</tbody></table></div>
+</div>
+<div class="card">
+<h2>Teams (<%= it.teams.length %>)</h2>
+<% if (it.teams.length === 0) { %><p class="lede">No teams yet.</p><% } else { %>
+<ul class="plain"><% for (const t of it.teams) { %><li><%= t.name %></li><% } %></ul>
+<% } %>
+</div>
+<%~ include("../partials/footer") %>

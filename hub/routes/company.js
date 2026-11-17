@@ -7,6 +7,7 @@ import { createEntitlements, MEMBER_APPS } from '../lib/entitlements.js';
 import { validate } from '../lib/validate.js';
 import { memberRoleSchema, teamNameSchema, teamMemberSchema } from '../schemas/company.js';
 import { mountCompanyInvite } from './company-invite.js';
+import { pickNotice } from '../lib/notices.js';
 
 // Fixed text for ?notice=<key>. Never render the query value itself.
 const NOTICES = {
@@ -75,8 +76,7 @@ export function mountCompany(app, { emailSender } = {}) {
       teams: org.teamsForUser(m.userId, req.company.id).map((t) => t.name),
     }));
     const teams = org.listTeams(req.company.id);
-    const key = req.query.notice;
-    const notice = typeof key === 'string' && Object.hasOwn(NOTICES, key) ? NOTICES[key] : null;
+    const notice = pickNotice(NOTICES, req.query.notice);
     res.render('company/console', {
       user: req.user,
       company: req.company,
