@@ -229,3 +229,15 @@ test('an owner row offers Make member and no per-app actions', async () => {
   assert.match(row, /Every app/);
   assert.doesNotMatch(row, /\/apps\//);
 });
+
+test('remove and re-invite cannot get past the per-recipient limit', async () => {
+  const t = await build();
+  addMember(t, 'mem');
+  for (let i = 0; i < 3; i++) await resend(t, 'mem');
+  await post(t.app, '/company/acme/members/mem/remove').set('Cookie', cookie(t.sid));
+  const res = await invite(t, 'mem@b.c');
+  assert.equal(res.headers.location, '/company/acme?notice=invite_email_throttled');
+  assert.ok(t.db.prepare('SELECT 1 FROM company_members WHERE user_id=?').get('mem'));
+  assert.equal(t.sender.sent.length, 3);
+  assert.equal(tokensFor(t.db, 'mem@b.c').length, 3);
+});

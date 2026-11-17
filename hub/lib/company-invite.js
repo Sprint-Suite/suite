@@ -1,6 +1,7 @@
 // lib/company-invite.js — add someone to a company and email them a sign-in link.
 import { randomToken, now } from './tokens.js';
 import { createOrg } from './org.js';
+import { createLimiter } from './rate-limit.js';
 
 export function createCompanyInviter(db, { emailSender, baseUrl, inviteTtlMs }) {
   const org = createOrg(db);
@@ -8,7 +9,13 @@ export function createCompanyInviter(db, { emailSender, baseUrl, inviteTtlMs }) 
     'INSERT INTO magic_link_tokens (token,email,return_to,created_at,expires_at) VALUES (?,?,?,?,?)',
   );
 
+  // One allowance per recipient address, shared by invite and resend, so that
+  // removing and re-inviting someone cannot send them more email.
+  const recipientLimiter = createLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
+
+  // A fresh token, or null when the recipient's allowance is spent.
   function mintToken(email) {
+    if (!recipientLimiter.check(email)) return null;
     const token = randomToken();
     const t = now();
     insertToken.run(token, email, null, t, t + inviteTtlMs);
@@ -20,8 +27,9 @@ export function createCompanyInviter(db, { emailSender, baseUrl, inviteTtlMs }) 
   // nothing sent) or a disabled account (/auth/magic would refuse it anyway).
   const addMember = db.transaction(({ email, companyId, role }) => {
     const r = org.inviteCompanyMember({ email, companyId, role });
-    const token = r.alreadyMember || r.user.disabled_at ? null : mintToken(r.user.email);
-    return { ...r, token };
+    if (r.alreadyMember || r.user.disabled_at) return { ...r, token: null };
+    const token = mintToken(r.user.email);
+    return { ...r, token, throttled: !token };
   });
 
   // Resolves true when the provider accepted the email. Never throws.

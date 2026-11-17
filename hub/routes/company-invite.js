@@ -2,7 +2,6 @@
 // Outcomes come back as ?notice=<key>; routes/company.js renders the fixed text.
 import { createCompanyInviter } from '../lib/company-invite.js';
 import { createAuditLogger } from '../lib/audit.js';
-import { createLimiter } from '../lib/rate-limit.js';
 import logger from '../lib/logger.js';
 import { validate } from '../lib/validate.js';
 import { inviteMemberSchema } from '../schemas/company.js';
@@ -22,7 +21,6 @@ export function mountCompanyInvite(app, { manage, emailSender }) {
     baseUrl: config.baseUrl,
     inviteTtlMs: config.inviteTtlMs,
   });
-  const resendLimiter = createLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
   const back = (req, res, notice) => res.redirect(`/company/${req.company.slug}?notice=${notice}`);
 
   const sendTo = (req, email, token) =>
@@ -48,6 +46,7 @@ export function mountCompanyInvite(app, { manage, emailSender }) {
         metadata: { company: req.company.slug, email, role },
         ip: req.ip,
       });
+      if (r.throttled) return back(req, res, 'invite_email_throttled');
       if (!r.token) return back(req, res, 'account_disabled');
       const sent = await sendTo(req, r.user.email, r.token);
       back(req, res, sent ? 'invited' : 'invite_email_failed');
@@ -67,14 +66,15 @@ export function mountCompanyInvite(app, { manage, emailSender }) {
         .render('error', { title: 'Not found', message: 'Not a member of this company.' });
     }
     if (target.disabled_at) return back(req, res, 'account_disabled');
-    if (!resendLimiter.check(target.id)) return back(req, res, 'resend_throttled');
+    const token = inviter.mintToken(target.email);
+    if (!token) return back(req, res, 'resend_throttled');
     audit.log({
       userId: req.user.id,
       eventType: 'company_invite_resent',
       metadata: { company: req.company.slug, target: target.id },
       ip: req.ip,
     });
-    const sent = await sendTo(req, target.email, inviter.mintToken(target.email));
+    const sent = await sendTo(req, target.email, token);
     back(req, res, sent ? 'resent' : 'invite_email_failed');
   });
 }

@@ -17,6 +17,10 @@ const NOTICES = {
     ok: false,
     text: 'The member is added, but the sign-in email could not be sent. Try "Resend link" shortly.',
   },
+  invite_email_throttled: {
+    ok: false,
+    text: 'The member is added, but too many links went to that address in the last hour, so none was sent.',
+  },
   account_disabled: { ok: false, text: 'That account is disabled, so no sign-in link was sent.' },
   resend_throttled: {
     ok: false,
