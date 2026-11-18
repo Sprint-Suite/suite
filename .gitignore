@@ -24,3 +24,8 @@ docs/architecture/apps.zip
 
 # graphify knowledge-graph output (regenerable tool artifact + cache)
 graphify-out/
+
+# hub browser tests
+hub/tests/e2e/.data/
+hub/test-results/
+hub/playwright-report/
