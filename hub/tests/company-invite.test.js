@@ -190,7 +190,7 @@ async function rowFor(t, email) {
   return row;
 }
 
-test('a member row states role, app access, teams and sign-in history, with explicit actions', async () => {
+test('a member row states role, teams and sign-in history, with explicit actions', async () => {
   const t = await build();
   addMember(t, 'mem');
   const team = t.org.createTeam({ companyId: t.company.id, name: 'Squad A' });
@@ -198,25 +198,19 @@ test('a member row states role, app access, teams and sign-in history, with expl
   const row = await rowFor(t, 'mem@b.c');
   assert.match(row, />Member</);
   assert.match(row, /name="role" value="owner"[\s\S]*>Make owner</);
-  assert.match(row, /data-confirm="[^"]*get every app/);
-  assert.match(row, /Signal: off[\s\S]*value="grant"[\s\S]*>Enable Signal</);
+  assert.doesNotMatch(row, /\/apps\//);
   assert.match(row, /Squad A/);
   assert.match(row, />Never signed in</);
   assert.match(row, /members\/mem\/resend/);
 });
 
-test('a granted app shows on with a Disable action; a signed-in member has no resend', async () => {
+test('a signed-in member has no resend', async () => {
   const t = await build();
   addMember(t, 'mem');
-  await post(t.app, '/company/acme/members/mem/apps/raid')
-    .type('form')
-    .send({ action: 'grant' })
-    .set('Cookie', cookie(t.sid));
   t.db
     .prepare('INSERT INTO audit_events (user_id,event_type,created_at) VALUES (?,?,?)')
     .run('mem', 'session_created', now());
   const row = await rowFor(t, 'mem@b.c');
-  assert.match(row, /RAID: on[\s\S]*value="revoke"[\s\S]*>Disable RAID</);
   assert.match(row, />Signed in</);
   assert.doesNotMatch(row, /resend/);
 });
@@ -226,7 +220,6 @@ test('an owner row offers Make member and no per-app actions', async () => {
   const row = await rowFor(t, 'owner@b.c');
   assert.match(row, />Owner</);
   assert.match(row, /name="role" value="member"[\s\S]*>Make member</);
-  assert.match(row, /Every app/);
   assert.doesNotMatch(row, /\/apps\//);
 });
 

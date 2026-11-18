@@ -97,8 +97,12 @@ test('heartbeat reflects removal from the company', async () => {
 
 test('heartbeat reflects a revoked entitlement', async () => {
   const { app, db, sid } = await setup();
-  const { ent, target } = await joinCompanyWithRaid(db);
+  const { ent } = await joinCompanyWithRaid(db);
+  const target = { app: 'poker', principalType: 'user', principalId: 'u1' };
+  ent.grantEntitlement(target);
   ent.revokeEntitlement(target);
-  const res = await beat(app, sid);
+  const res = await request(app)
+    .post(`/api/sessions/${sid}/heartbeat`)
+    .set('Authorization', 'Bearer k-poker');
   assert.equal(res.body.entitlement.entitled, false);
 });

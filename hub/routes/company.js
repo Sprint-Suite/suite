@@ -3,7 +3,6 @@ import { createRequireSession } from '../middleware/requireSession.js';
 import { createRequireCompanyRole } from '../middleware/requireCompanyRole.js';
 import { createOrg } from '../lib/org.js';
 import { createAuditLogger } from '../lib/audit.js';
-import { createEntitlements, MEMBER_APPS } from '../lib/entitlements.js';
 import { validate } from '../lib/validate.js';
 import { memberRoleSchema, teamNameSchema, teamMemberSchema } from '../schemas/company.js';
 import { mountCompanyInvite } from './company-invite.js';
@@ -35,7 +34,6 @@ export function mountCompany(app, { emailSender } = {}) {
   const companyRole = createRequireCompanyRole(db);
   const org = createOrg(db);
   const audit = createAuditLogger(db);
-  const ent = createEntitlements(db);
   const manage = [requireSession, companyRole(['owner'])];
 
   const badReq = (title, message) => (_req, res) =>
@@ -71,8 +69,6 @@ export function mountCompany(app, { emailSender } = {}) {
   app.get('/company/:slug', ...manage, (req, res) => {
     const members = org.listCompanyMembers(req.company.id).map((m) => ({
       ...m,
-      signalOn: ent.resolveEntitlement(m.userId, 'signal').entitled,
-      raidOn: ent.resolveEntitlement(m.userId, 'raid').entitled,
       teams: org.teamsForUser(m.userId, req.company.id).map((t) => t.name),
     }));
     const teams = org.listTeams(req.company.id);
@@ -258,64 +254,6 @@ export function mountCompany(app, { emailSender } = {}) {
       metadata: { company: req.company.slug, target: targetId },
       ip: req.ip,
     });
-    res.redirect('/company/' + req.company.slug);
-  });
-
-  // TODO(multi-tenancy): these grants are user-scoped with no company provenance, and
-  // a user can belong to several companies. A grant made here therefore follows the
-  // user into every company, and survives removal from this one while they remain a
-  // member elsewhere (lib/org.js only withdraws it once they have no company left).
-  app.post('/company/:slug/members/:userId/apps/:app', ...manage, (req, res) => {
-    const appName = req.params.app;
-    const action = req.body.action;
-    const targetId = req.params.userId;
-    const spec = Object.hasOwn(MEMBER_APPS, appName) ? MEMBER_APPS[appName] : null;
-    if (!spec) {
-      return res
-        .status(400)
-        .render('error', { title: 'Bad request', message: 'That app is not granted per-member.' });
-    }
-    if (action !== 'grant' && action !== 'revoke') {
-      return res.status(400).render('error', { title: 'Bad request', message: 'Unknown action.' });
-    }
-    const target = db
-      .prepare('SELECT role FROM company_members WHERE user_id=? AND company_id=?')
-      .get(targetId, req.company.id);
-    if (!target) {
-      return res
-        .status(404)
-        .render('error', { title: 'Not found', message: 'Not a member of this company.' });
-    }
-    if (target.role === 'owner') {
-      return res.status(400).render('error', {
-        title: "Can't change",
-        message: 'Owners always have access to every app.',
-      });
-    }
-    if (action === 'grant') {
-      ent.grantEntitlement({
-        app: appName,
-        principalType: 'user',
-        principalId: targetId,
-        quotaLimit: spec.quotaLimit,
-        quotaPeriod: spec.quotaPeriod,
-        grantedBy: req.user.id,
-      });
-      audit.log({
-        userId: req.user.id,
-        eventType: 'member_app_granted',
-        metadata: { company: req.company.slug, target: targetId, app: appName },
-        ip: req.ip,
-      });
-    } else {
-      ent.revokeEntitlement({ app: appName, principalType: 'user', principalId: targetId });
-      audit.log({
-        userId: req.user.id,
-        eventType: 'member_app_revoked',
-        metadata: { company: req.company.slug, target: targetId, app: appName },
-        ip: req.ip,
-      });
-    }
     res.redirect('/company/' + req.company.slug);
   });
 }

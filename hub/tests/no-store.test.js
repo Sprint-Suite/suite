@@ -86,11 +86,11 @@ test('a key-authenticated API response is not stored', async () => {
   const sid = seedSession(db);
 
   const res = await request(app)
-    .post('/api/apps/raid/consume')
-    .set('Authorization', 'Bearer k-raid')
+    .post('/api/apps/poker/consume')
+    .set('Authorization', 'Bearer k-poker')
     .send({ central_session_id: sid });
 
-  assert.equal(res.status, 403); // seeded user has no raid entitlement
+  assert.equal(res.status, 403); // seeded user has no poker entitlement
   assert.equal(res.headers['cache-control'], 'no-store');
 });
 

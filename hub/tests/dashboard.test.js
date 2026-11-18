@@ -47,9 +47,9 @@ test('Phase 2: Sprintplan is a launched app, no longer a free direct link', asyn
   // The Brief 10 free-direct-link tile is gone (collaboration requires an account).
   assert.doesNotMatch(res.text, /href="https:\/\/sprintplan\.uk"/);
   // Sprintplan is open to every signed-in user: no grant, yet the launch form is
-  // there. Sprintsignal, still gated, is the near miss.
+  // there. Sprintpoker, granted per company, is the near miss.
   assert.match(res.text, /action="\/launch\/plan"/);
-  assert.doesNotMatch(res.text, /action="\/launch\/signal"/);
+  assert.doesNotMatch(res.text, /action="\/launch\/poker"/);
 });
 
 test('dashboard shows a Manage link for companies the user owns/admins', async () => {
@@ -92,16 +92,18 @@ test('dashboard renders a launchable tile only for entitled apps', async () => {
   ).run(sid, 'u1', now(), now(), now() + 60_000);
   const { createEntitlements } = await import('../lib/entitlements.js?t=' + Date.now());
   createEntitlements(db).grantEntitlement({
-    app: 'raid',
+    app: 'retro',
     principalType: 'user',
     principalId: 'u1',
   });
 
   const res = await request(app).get('/dashboard').set('Cookie', `hub_session=${sid}`);
   assert.equal(res.status, 200);
-  // raid is entitled -> launch form present
+  // retro is granted; signal and raid belong to every user -> launch forms present
+  assert.match(res.text, /action="\/launch\/retro"/);
+  assert.match(res.text, /action="\/launch\/signal"/);
   assert.match(res.text, /action="\/launch\/raid"/);
-  // signal is NOT entitled -> no launch form, shows Request access
-  assert.doesNotMatch(res.text, /action="\/launch\/signal"/);
+  // poker is NOT granted -> no launch form, shows Request access
+  assert.doesNotMatch(res.text, /action="\/launch\/poker"/);
   assert.match(res.text, /Request access/);
 });

@@ -134,11 +134,11 @@ test('exchange returns entitled:false when the user has no grant for the app', a
   const tok = randomToken();
   db.prepare(
     'INSERT INTO launch_tokens (token,central_session_id,target_app,created_at,expires_at) VALUES (?,?,?,?,?)',
-  ).run(tok, sid, 'raid', now(), now() + 30_000);
+  ).run(tok, sid, 'poker', now(), now() + 30_000);
 
   const res = await request(app)
     .post('/api/sessions/exchange')
-    .set('Authorization', 'Bearer k-raid')
+    .set('Authorization', 'Bearer k-poker')
     .send({ launch_token: tok });
 
   assert.equal(res.status, 200);

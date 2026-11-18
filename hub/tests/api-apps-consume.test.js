@@ -46,8 +46,8 @@ test('consume returns 403 not_entitled when the user has no grant', async () => 
   const { app, db } = await buildWithApps();
   const sid = await seedSession(db);
   const res = await request(app)
-    .post('/api/apps/raid/consume')
-    .set('Authorization', 'Bearer k-raid')
+    .post('/api/apps/poker/consume')
+    .set('Authorization', 'Bearer k-poker')
     .send({ central_session_id: sid });
   assert.equal(res.status, 403);
   assert.equal(res.body.reason, 'not_entitled');
@@ -58,7 +58,7 @@ test('consume returns 200 and decrements remaining; 402 when exhausted', async (
   const sid = await seedSession(db);
   const { createEntitlements } = await import('../lib/entitlements.js?t=' + Date.now());
   createEntitlements(db).grantEntitlement({
-    app: 'raid',
+    app: 'poker',
     principalType: 'user',
     principalId: 'u1',
     quotaLimit: 1,
@@ -66,16 +66,16 @@ test('consume returns 200 and decrements remaining; 402 when exhausted', async (
   });
 
   const ok = await request(app)
-    .post('/api/apps/raid/consume')
-    .set('Authorization', 'Bearer k-raid')
+    .post('/api/apps/poker/consume')
+    .set('Authorization', 'Bearer k-poker')
     .send({ central_session_id: sid });
   assert.equal(ok.status, 200);
   assert.equal(ok.body.ok, true);
   assert.equal(ok.body.remaining, 0);
 
   const exhausted = await request(app)
-    .post('/api/apps/raid/consume')
-    .set('Authorization', 'Bearer k-raid')
+    .post('/api/apps/poker/consume')
+    .set('Authorization', 'Bearer k-poker')
     .send({ central_session_id: sid });
   assert.equal(exhausted.status, 402);
   assert.equal(exhausted.body.reason, 'quota_exceeded');
