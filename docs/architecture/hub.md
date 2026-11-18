@@ -154,7 +154,7 @@ Added 2026-06-09 (Tier-1 #2 of the tech-stack upgrade). The manual `.trim()`/reg
 
 **Roles:**
 - Platform-level: `users.is_admin` → operator (the `/admin` console). Set via `scripts/create-admin.js`.
-- Company-level: `owner | member` (collapsed from owner/admin/member by migration 004). Owners can manage the company console; the system enforces **at least one owner** (last-owner guard throws on the final owner's removal/demotion). Owners implicitly have every app; members get per-app grants.
+- Company-level: `owner | member` (collapsed from owner/admin/member by migration 004). Owners can manage the company console; the system enforces **at least one owner** (last-owner guard throws on the final owner's removal/demotion). App access does not depend on role.
 - Team-level: `lead | member` (used for context/labeling; not a permission gate in the hub).
 
 **Companies / teams / entitlements:** entitlements attach to a `principal` that is a `user`, `team`, or `company`. `resolveEntitlement(userId, app)` collects all principals the user belongs to (self + their teams + their companies), finds active matching grants, and picks the most generous (an unlimited grant wins; otherwise the one with most remaining quota). `consume()` does the same selection inside a transaction and increments `app_usage` for the chosen principal's current period. Default provisioning grants **Poker + Retro at the company level** (all members inherit). **Every signed-in user holds Signal (unlimited) + RAID (25/month)** whatever their role or company, with no grant row (`MEMBER_APPS`): `select()` adds a derived user-principal candidate, so it shares the user's usage bucket with any explicit user grant, which can still raise the limit.
