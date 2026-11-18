@@ -91,3 +91,43 @@ jobs:
       - name: Audit auth-client production dependencies
         working-directory: shared/auth-client
         run: npm audit --omit=dev
+
+  e2e:
+    name: Hub browser tests
+    runs-on: ubuntu-24.04 # Playwright 1.59.1 has no chromium build for ubuntu 26.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: hub/package-lock.json
+
+      - name: Install hub dependencies
+        working-directory: hub
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: hub
+        run: npx playwright install --with-deps chromium
+
+      - name: Run hub browser tests
+        working-directory: hub
+        run: npm run test:e2e
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hub-e2e-test-results
+          path: hub/test-results/
+          retention-days: 7
