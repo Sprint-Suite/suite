@@ -8,7 +8,8 @@ const required = (name) => {
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  baseUrl: required('BASE_URL'),
+  // Every link is built as `${baseUrl}/path`, so a trailing slash would yield //path.
+  baseUrl: required('BASE_URL').replace(/\/+$/, ''),
   dbPath: required('DB_PATH'),
   resendApiKey: required('RESEND_API_KEY'),
   fromEmail: required('FROM_EMAIL'),

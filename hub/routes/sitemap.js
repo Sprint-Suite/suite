@@ -14,12 +14,7 @@ function escapeXml(value) {
 }
 
 export function buildSitemap(baseUrl) {
-  // BASE_URL is unvalidated (config.js takes it verbatim), so a stray trailing
-  // slash would publish sprintsuite.uk//request. Trimmed here only — the same slash
-  // also breaks the magic links built in routes/login.js and routes/admin.js, and
-  // fixing THAT means normalising in config.js, which the CSRF allow-list reads.
-  const root = baseUrl.replace(/\/+$/, '');
-  const urls = PUBLIC_PATHS.map((p) => `  <url><loc>${escapeXml(root + p)}</loc></url>`);
+  const urls = PUBLIC_PATHS.map((p) => `  <url><loc>${escapeXml(baseUrl + p)}</loc></url>`);
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
