@@ -24,18 +24,34 @@ in a CI job on every PR. Anything else is a new project.
    `/admin/companies/:slug`: page renders, no horizontal page scroll
    (`scrollWidth <= clientWidth` on the document), the member/owner table is present.
    No screenshot diffing — taste stays with David.
-3. **Consent withdrawal** on `/privacy` with `GA_MEASUREMENT_ID` set: accept on first
-   load → reload → no bar; click "Change your analytics choice" → reject → reload twice →
-   bar stays hidden and `ss_consent=denied`. All `*.googletagmanager.com` /
-   `*.google-analytics.com` requests are intercepted with `page.route` (stub/abort) —
-   the test never contacts Google.
+3. **Consent withdrawal** on `/privacy` with `GA_MEASUREMENT_ID=G-TEST`. Google hosts
+   are intercepted with `page.route` and fulfilled with inert JS (so containment adds no
+   console errors), and every intercepted request is recorded. Assertions:
+   - **no** Google request before a choice is made;
+   - Accept → a Google script/collect request **is** intercepted; reload → no bar, and a
+     request is intercepted again (granted branch);
+   - seed `_ga` / `_ga_TEST` cookies, click "Change your analytics choice" → Reject →
+     immediately `window['ga-disable-G-TEST'] === true`, a queued
+     `consent update analytics_storage:'denied'` in `dataLayer`, the `_ga*` cookies are
+     deleted, `ss_consent=denied`;
+   - reload twice → bar hidden and **no** Google request on either load.
+   The positive request assertions are what make this discriminating: deleting the
+   `applyConsent` call in `choose()` must fail the test, not only a missing cookie.
 4. **CSP-clean pages**: the 9 views de-inlined in `1423cbb` (admin/users, check-email,
-   company/console, company/team, confirm, error, legal, login, request-received), each
-   loaded under the real headers with **zero console errors and zero CSP violations**
-   (listen for `console` type `error` and `securitypolicyviolation` via an init script).
-   *Builder's call:* `error.eta` is only ever served with a 4xx/429 status, and Chromium
-   logs the document's own "Failed to load resource" for that. That single message is
-   ignored on that page only; CSP violations must still be zero.
+   company/console, company/team, confirm, error, legal, login, request-received). Each
+   case asserts it reached the **intended** view, not merely a clean page: expected
+   document status, final URL, and a distinctive visible marker of that view; the
+   response carries an enforced `Content-Security-Policy` matching that route's policy:
+   the default policy (`script-src 'self'` only) for eight views, and the marketing
+   policy for `request-received` (rendered by `POST /request` under
+   `marketingMiddleware`), where `https://*.googletagmanager.com` is the one permitted
+   extra script source and is asserted present. `style-src` is `'self'`-only and
+   `unsafe-inline` is forbidden on every view. Then zero `securitypolicyviolation`
+   events (init script), zero `console` errors and zero `pageerror` events. Seed what each
+   view needs to render its populated state (a team for company/team, a valid magic token
+   for confirm, rows so conditional forms appear). For `error.eta` only, ignore the single
+   resource error whose URL and status are the **document's own**; script/stylesheet
+   failures there still fail the test.
 
 ## Non-goals / anti-goals
 
@@ -61,7 +77,7 @@ in a CI job on every PR. Anything else is a new project.
   `GA_MEASUREMENT_ID=G-TEST`.
 - Seeding: a helper opens the same `DB_PATH` with the hub's own `openDb()` (so
   migrations are the real ones) and inserts an admin, a company with an owner and a
-  member, and a pending access request, plus a `central_sessions` row per user. Tests
+  member, and a pending access request, a team, a valid magic token, plus a `central_sessions` row per user. Tests
   set the `hub_session` cookie for the role they need. Seeding must leave each spec
   independent: a spec that mutates (Remove) seeds its own rows.
 - `@playwright/test` added to hub devDependencies at an **exact** version (the one
