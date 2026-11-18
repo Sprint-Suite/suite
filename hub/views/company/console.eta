@@ -13,7 +13,7 @@
 <button class="btn btn-pri" type="submit">Invite and email link</button>
 </form>
 <div class="table-wrap"><table class="table">
-<thead><tr><th>Email</th><th>Role</th><th>Apps</th><th>Teams</th><th>Sign-in</th><th></th></tr></thead>
+<thead><tr><th>Email</th><th>Role</th><th>Teams</th><th>Sign-in</th><th></th></tr></thead>
 <tbody>
 <% const base = "/company/" + it.company.slug + "/members/"; %>
 <% for (const m of it.members) { %>
@@ -25,24 +25,9 @@
 <% if (m.role === "owner") { %>
 <form method="POST" action="<%= base + m.userId %>/role"><input type="hidden" name="role" value="member"><button class="btn btn-ghost btn-sm" type="submit">Make member</button></form>
 <% } else { %>
-<form method="POST" action="<%= base + m.userId %>/role" data-confirm="Make <%= m.email %> an owner? Owners can manage <%= it.company.name %> and get every app." data-confirm-title="Make owner" data-confirm-ok="Make owner"><input type="hidden" name="role" value="owner"><button class="btn btn-ghost btn-sm" type="submit">Make owner</button></form>
+<form method="POST" action="<%= base + m.userId %>/role" data-confirm="Make <%= m.email %> an owner? Owners can manage <%= it.company.name %>." data-confirm-title="Make owner" data-confirm-ok="Make owner"><input type="hidden" name="role" value="owner"><button class="btn btn-ghost btn-sm" type="submit">Make owner</button></form>
 <% } %>
 </div>
-</td>
-<td>
-<% if (m.role === "owner") { %>
-  <span class="micro">Every app (owner)</span>
-<% } else { %>
-  <div class="tbacts">
-  <% for (const a of [["signal","Signal", m.signalOn],["raid","RAID", m.raidOn]]) { %>
-    <form method="POST" action="<%= base + m.userId %>/apps/<%= a[0] %>">
-      <span class="micro"><%= a[1] %>: <%= a[2] ? "on" : "off" %></span>
-      <input type="hidden" name="action" value="<%= a[2] ? 'revoke' : 'grant' %>">
-      <button class="btn btn-ghost btn-sm" type="submit"><%= a[2] ? "Disable" : "Enable" %> <%= a[1] %></button>
-    </form>
-  <% } %>
-  </div>
-<% } %>
 </td>
 <td><span class="micro"><%= m.teams.length ? m.teams.join(", ") : "—" %></span></td>
 <td>
