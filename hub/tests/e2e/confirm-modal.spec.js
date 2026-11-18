@@ -76,7 +76,18 @@ test('Remove → confirm actually removes the member', async ({ page, context })
 
   await page.locator(`form[action$="/members/${goneId}/remove"] button`).click();
   await expect(page.locator('.confirm-title')).toHaveText('Remove member');
-  await Promise.all([page.waitForNavigation(), page.locator('.confirm-ok').click()]);
+  const isRemove = (r) => r.request().method() === 'POST' && r.url().endsWith(`/members/${goneId}/remove`);
+  const isConsole = (r) =>
+    r.request().isNavigationRequest() && r.request().method() === 'GET' && r.url().endsWith('/company/acme');
+  const [removed, consolePage] = await Promise.all([
+    page.waitForResponse(isRemove),
+    page.waitForResponse(isConsole),
+    page.locator('.confirm-ok').click(),
+  ]);
 
+  expect(removed.status()).toBeLessThan(400);
+  expect(consolePage.status()).toBe(200);
+  await expect(page).toHaveURL(/\/company\/acme$/);
+  await expect(page.getByText(EMAILS.member).first()).toBeVisible();
   await expect(page.getByText(gone)).toHaveCount(0);
 });

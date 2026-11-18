@@ -108,6 +108,7 @@ for (const c of CASES) {
     const errors = watch(page);
 
     const response = await c.reach(page, context);
+    await page.waitForLoadState('load');
 
     expect(response.status()).toBe(c.status);
     await expect(page).toHaveURL(new RegExp(c.url.replace(/\//g, '\\/') + '(\\?|$)'));
