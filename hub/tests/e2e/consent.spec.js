@@ -4,9 +4,9 @@ const GA = /googletagmanager\.com|google-analytics\.com/;
 const BAR = '.consent';
 const ORIGIN = 'http://127.0.0.1:3067';
 
-function trackGoogle(context) {
+async function trackGoogle(context) {
   const hits = [];
-  context.route(GA, (route) => {
+  await context.route(GA, (route) => {
     hits.push(route.request().url());
     route.fulfill({ status: 200, contentType: 'text/javascript', body: '' });
   });
@@ -80,7 +80,7 @@ async function reloadsStayQuiet(page, hits) {
 }
 
 test('withdrawal stops analytics and survives two reloads', async ({ page, context }) => {
-  const hits = trackGoogle(context);
+  const hits = await trackGoogle(context);
   const errors = trackErrors(page);
   await acceptConsent(page, context, hits);
   await reloadStillGranted(page, hits);
