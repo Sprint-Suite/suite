@@ -38,3 +38,17 @@ test('config parses ALLOWED_APP_DOMAINS to array', async () => {
   assert.deepEqual(cfg.allowedAppDomains, ['https://a.com', 'https://b.com']);
   assert.equal(cfg.apiKeys.raid, 'k1');
 });
+
+// Near misses: one slash, several, and a bare origin that must come through intact.
+test('config strips trailing slashes from BASE_URL so built links never read //auth', async () => {
+  for (const [raw, want] of [
+    ['https://sprintsuite.uk/', 'https://sprintsuite.uk'],
+    ['https://sprintsuite.uk///', 'https://sprintsuite.uk'],
+    ['https://sprintsuite.uk', 'https://sprintsuite.uk'],
+  ]) {
+    process.env.BASE_URL = raw;
+    const cfg = (await import('../config.js?t=' + Date.now() + raw.length)).default;
+    assert.equal(cfg.baseUrl, want);
+  }
+  process.env.BASE_URL = 'https://sprintsuite.uk';
+});
