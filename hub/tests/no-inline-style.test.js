@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Eta } from 'eta';
+import { LICENCE_HTML } from '../public/js/licence-text.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const viewsDir = path.join(__dirname, '../views');
@@ -59,7 +60,7 @@ const FIXTURES = {
   confirm: { token: 'tok' },
   error: { title: 'Not found', message: 'No such page', reqId: 'req-1', backHref: '/' },
   legal: { title: 'Terms' },
-  license: {},
+  license: { licence: { html: LICENCE_HTML, version: '1.0', effective: '4 June 2026' } },
   privacy: {},
   'request-received': {},
   request: { error: 'Something went wrong', values: { email: 'a@test' } },
