@@ -12,6 +12,8 @@ const STATIC_ASSETS = [
   { src: 'instrument-core.css', destDir: 'css' },
   { src: 'oscilloscope.js', destDir: 'js' },
   { src: 'glyphs.svg', destDir: 'illos' },
+  { src: 'licence-text.js', destDir: 'js' },
+  { src: 'licence-modal.js', destDir: 'js' },
 ];
 
 function fontAssets() {
