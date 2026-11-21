@@ -75,7 +75,9 @@ test('GET /license renders the Free Use Licence (Version 1.0)', async () => {
   assert.match(res.text, /Grant of licence/);
   assert.match(res.text, /Limitation of liability/);
   assert.match(res.text, /England and Wales/);
-  assert.match(res.text, /href="\/privacy"/); // links to the privacy note
+  assert.match(res.text, /Version 1\.0 · Effective 4 June 2026/);
+  assert.match(res.text, /11\. Governing law\./);
+  assert.match(res.text, /href="https:\/\/sprintsuite\.uk\/privacy"/); // shared text links absolutely
   assert.doesNotMatch(res.text, /being finalised/); // not the stub
   assert.doesNotMatch(res.text, /\[[A-Z][^\]]*\]/); // no leftover [BRACKET] placeholders
 });
