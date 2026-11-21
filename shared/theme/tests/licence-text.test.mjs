@@ -38,4 +38,3 @@ test('both licence modules sync into every surface js/', () => {
     );
   }
 });
-
